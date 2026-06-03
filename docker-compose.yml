@@ -1,0 +1,72 @@
+services:
+  # ─── Base de datos ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hm
+      POSTGRES_PASSWORD: hm_dev_password
+      POSTGRES_DB: hm_sistema
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hm -d hm_sistema"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── API ─────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://hm:hm_dev_password@postgres:5432/hm_sistema
+      BETTER_AUTH_SECRET: dev-secret-cambia-en-produccion-32ch
+      BETTER_AUTH_URL: http://localhost:3001
+      FACTURAMA_USER: ${FACTURAMA_USER:-}
+      FACTURAMA_PASSWORD: ${FACTURAMA_PASSWORD:-}
+      FACTURAMA_SANDBOX: "true"
+      EMISOR_CP: ${EMISOR_CP:-06600}
+      NODE_ENV: development
+      PORT: 3001
+      HOST: 0.0.0.0
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3001:3001"
+    volumes:
+      # Montar código fuente para hot-reload
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/shared/src:/app/packages/shared/src
+      # Evitar que el volumen pise los node_modules del contenedor
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Web ─────────────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

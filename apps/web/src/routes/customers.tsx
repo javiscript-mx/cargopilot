@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { Building2 } from "lucide-react"
+import { Building2, Plus } from "lucide-react"
+import { useState } from "react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { CustomerForm } from "@/components/customers/customer-form"
 import { customersApi } from "@/api/customers"
 
 export const Route = createFileRoute("/customers")({
@@ -10,6 +13,7 @@ export const Route = createFileRoute("/customers")({
 })
 
 function CustomersPage() {
+  const [showForm, setShowForm] = useState(false)
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ["customers"],
     queryFn: customersApi.list,
@@ -17,9 +21,14 @@ function CustomersPage() {
 
   return (
     <AppLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Clientes</h1>
-        <p className="text-[--color-muted-foreground]">{customers.length} clientes registrados</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Clientes</h1>
+          <p className="text-[--color-muted-foreground]">{customers.length} clientes registrados</p>
+        </div>
+        <Button onClick={() => setShowForm(true)}>
+          <Plus className="h-4 w-4" /> Nuevo cliente
+        </Button>
       </div>
 
       <Card>
@@ -30,6 +39,7 @@ function CustomersPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <Building2 className="h-12 w-12 opacity-30" />
               <p>No hay clientes registrados</p>
+              <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Agregar primer cliente</Button>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -59,6 +69,8 @@ function CustomersPage() {
           )}
         </CardContent>
       </Card>
+
+      <CustomerForm open={showForm} onClose={() => setShowForm(false)} />
     </AppLayout>
   )
 }

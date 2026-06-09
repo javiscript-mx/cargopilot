@@ -111,8 +111,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Desktop sidebar ── */}
       <aside
         className={cn(
-          "hidden md:flex flex-col border-r border-[--color-border] bg-[--color-card]",
-          "transition-all duration-200",
+          "hidden md:flex flex-col border-r border-gray-200 bg-white",
+          "transition-all duration-200 shrink-0",
           collapsed ? "w-14" : "w-60",
         )}
       >
@@ -122,7 +122,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Mobile drawer overlay ── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -131,8 +131,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-72 flex-col",
-          "border-r border-[--color-border] bg-[--color-card]",
-          "transition-transform duration-200 md:hidden",
+          "border-r border-gray-200 bg-white shadow-xl",
+          "transition-transform duration-250 ease-in-out md:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -142,7 +142,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Main ── */}
       <main className="flex min-h-screen flex-1 flex-col overflow-auto bg-[--color-background]">
         {/* Topbar mobile */}
-        <header className="flex h-14 items-center gap-3 border-b border-[--color-border] bg-[--color-card] px-4 md:hidden">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 md:hidden">
           <button
             onClick={() => setMobileOpen(true)}
             className="rounded p-1.5 hover:bg-[--color-muted] text-[--color-muted-foreground]"

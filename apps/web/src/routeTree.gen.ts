@@ -15,7 +15,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShipmentsNewRouteImport } from './routes/shipments.new'
 import { Route as ShipmentsIdRouteImport } from './routes/shipments.$id'
+import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
+import { Route as CustomersNewRouteImport } from './routes/customers.new'
 
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
@@ -47,39 +50,63 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShipmentsNewRoute = ShipmentsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ShipmentsRoute,
+} as any)
 const ShipmentsIdRoute = ShipmentsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => ShipmentsRoute,
 } as any)
+const InvoicesNewRoute = InvoicesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => InvoicesRoute,
+} as any)
+const CustomersNewRoute = CustomersNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => CustomersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/customers': typeof CustomersRoute
-  '/invoices': typeof InvoicesRoute
+  '/customers': typeof CustomersRouteWithChildren
+  '/invoices': typeof InvoicesRouteWithChildren
   '/login': typeof LoginRoute
   '/shipments': typeof ShipmentsRouteWithChildren
   '/users': typeof UsersRoute
+  '/customers/new': typeof CustomersNewRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/shipments/$id': typeof ShipmentsIdRoute
+  '/shipments/new': typeof ShipmentsNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/customers': typeof CustomersRoute
-  '/invoices': typeof InvoicesRoute
+  '/customers': typeof CustomersRouteWithChildren
+  '/invoices': typeof InvoicesRouteWithChildren
   '/login': typeof LoginRoute
   '/shipments': typeof ShipmentsRouteWithChildren
   '/users': typeof UsersRoute
+  '/customers/new': typeof CustomersNewRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/shipments/$id': typeof ShipmentsIdRoute
+  '/shipments/new': typeof ShipmentsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/customers': typeof CustomersRoute
-  '/invoices': typeof InvoicesRoute
+  '/customers': typeof CustomersRouteWithChildren
+  '/invoices': typeof InvoicesRouteWithChildren
   '/login': typeof LoginRoute
   '/shipments': typeof ShipmentsRouteWithChildren
   '/users': typeof UsersRoute
+  '/customers/new': typeof CustomersNewRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/shipments/$id': typeof ShipmentsIdRoute
+  '/shipments/new': typeof ShipmentsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -90,7 +117,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/shipments'
     | '/users'
+    | '/customers/new'
+    | '/invoices/new'
     | '/shipments/$id'
+    | '/shipments/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -99,7 +129,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/shipments'
     | '/users'
+    | '/customers/new'
+    | '/invoices/new'
     | '/shipments/$id'
+    | '/shipments/new'
   id:
     | '__root__'
     | '/'
@@ -108,13 +141,16 @@ export interface FileRouteTypes {
     | '/login'
     | '/shipments'
     | '/users'
+    | '/customers/new'
+    | '/invoices/new'
     | '/shipments/$id'
+    | '/shipments/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  CustomersRoute: typeof CustomersRoute
-  InvoicesRoute: typeof InvoicesRoute
+  CustomersRoute: typeof CustomersRouteWithChildren
+  InvoicesRoute: typeof InvoicesRouteWithChildren
   LoginRoute: typeof LoginRoute
   ShipmentsRoute: typeof ShipmentsRouteWithChildren
   UsersRoute: typeof UsersRoute
@@ -164,6 +200,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/shipments/new': {
+      id: '/shipments/new'
+      path: '/new'
+      fullPath: '/shipments/new'
+      preLoaderRoute: typeof ShipmentsNewRouteImport
+      parentRoute: typeof ShipmentsRoute
+    }
     '/shipments/$id': {
       id: '/shipments/$id'
       path: '/$id'
@@ -171,15 +214,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShipmentsIdRouteImport
       parentRoute: typeof ShipmentsRoute
     }
+    '/invoices/new': {
+      id: '/invoices/new'
+      path: '/new'
+      fullPath: '/invoices/new'
+      preLoaderRoute: typeof InvoicesNewRouteImport
+      parentRoute: typeof InvoicesRoute
+    }
+    '/customers/new': {
+      id: '/customers/new'
+      path: '/new'
+      fullPath: '/customers/new'
+      preLoaderRoute: typeof CustomersNewRouteImport
+      parentRoute: typeof CustomersRoute
+    }
   }
 }
 
+interface CustomersRouteChildren {
+  CustomersNewRoute: typeof CustomersNewRoute
+}
+
+const CustomersRouteChildren: CustomersRouteChildren = {
+  CustomersNewRoute: CustomersNewRoute,
+}
+
+const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
+  CustomersRouteChildren,
+)
+
+interface InvoicesRouteChildren {
+  InvoicesNewRoute: typeof InvoicesNewRoute
+}
+
+const InvoicesRouteChildren: InvoicesRouteChildren = {
+  InvoicesNewRoute: InvoicesNewRoute,
+}
+
+const InvoicesRouteWithChildren = InvoicesRoute._addFileChildren(
+  InvoicesRouteChildren,
+)
+
 interface ShipmentsRouteChildren {
   ShipmentsIdRoute: typeof ShipmentsIdRoute
+  ShipmentsNewRoute: typeof ShipmentsNewRoute
 }
 
 const ShipmentsRouteChildren: ShipmentsRouteChildren = {
   ShipmentsIdRoute: ShipmentsIdRoute,
+  ShipmentsNewRoute: ShipmentsNewRoute,
 }
 
 const ShipmentsRouteWithChildren = ShipmentsRoute._addFileChildren(
@@ -188,8 +271,8 @@ const ShipmentsRouteWithChildren = ShipmentsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  CustomersRoute: CustomersRoute,
-  InvoicesRoute: InvoicesRoute,
+  CustomersRoute: CustomersRouteWithChildren,
+  InvoicesRoute: InvoicesRouteWithChildren,
   LoginRoute: LoginRoute,
   ShipmentsRoute: ShipmentsRouteWithChildren,
   UsersRoute: UsersRoute,

@@ -1,12 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { FileText, Plus, Download } from "lucide-react"
 import { useState } from "react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { InvoiceForm } from "@/components/invoices/invoice-form"
 import { StampDialog } from "@/components/invoices/stamp-dialog"
 import { invoicesApi, type Invoice, type InvoiceStatus } from "@/api/invoices"
 
@@ -21,7 +20,6 @@ const statusConfig: Record<InvoiceStatus, { label: string; variant: "default" | 
 }
 
 function InvoicesPage() {
-  const [showForm, setShowForm] = useState(false)
   const [stampTarget, setStampTarget] = useState<Invoice | null>(null)
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -36,9 +34,9 @@ function InvoicesPage() {
           <h1 className="text-2xl font-bold">Facturas</h1>
           <p className="text-[--color-muted-foreground]">{invoices.length} facturas en total</p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4" /> Nueva factura
-        </Button>
+        <Link to="/invoices/new">
+          <Button><Plus className="h-4 w-4" /> Nueva factura</Button>
+        </Link>
       </div>
 
       <Card>
@@ -49,7 +47,7 @@ function InvoicesPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <FileText className="h-12 w-12 opacity-30" />
               <p>No hay facturas registradas</p>
-              <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Crear primera factura</Button>
+              <Link to="/invoices/new"><Button><Plus className="h-4 w-4" /> Crear primera factura</Button></Link>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -107,7 +105,6 @@ function InvoicesPage() {
         </CardContent>
       </Card>
 
-      <InvoiceForm open={showForm} onClose={() => setShowForm(false)} />
       <StampDialog invoice={stampTarget} onClose={() => setStampTarget(null)} />
     </AppLayout>
   )

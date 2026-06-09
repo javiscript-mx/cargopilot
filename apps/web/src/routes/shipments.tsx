@@ -1,12 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { Package, Plus } from "lucide-react"
-import { useState } from "react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ShipmentForm } from "@/components/shipments/shipment-form"
 import { shipmentsApi, type ShipmentStatus } from "@/api/shipments"
 
 export const Route = createFileRoute("/shipments")({
@@ -22,7 +20,6 @@ const statusConfig: Record<ShipmentStatus, { label: string; variant: "default" |
 }
 
 function ShipmentsPage() {
-  const [showForm, setShowForm] = useState(false)
   const { data: shipments = [], isLoading } = useQuery({
     queryKey: ["shipments"],
     queryFn: shipmentsApi.list,
@@ -35,9 +32,9 @@ function ShipmentsPage() {
           <h1 className="text-2xl font-bold">Expedientes</h1>
           <p className="text-[--color-muted-foreground]">{shipments.length} expedientes en total</p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4" /> Nuevo expediente
-        </Button>
+        <Link to="/shipments/new">
+          <Button><Plus className="h-4 w-4" /> Nuevo expediente</Button>
+        </Link>
       </div>
 
       <Card>
@@ -48,7 +45,7 @@ function ShipmentsPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <Package className="h-12 w-12 opacity-30" />
               <p>No hay expedientes registrados</p>
-              <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Crear primer expediente</Button>
+              <Link to="/shipments/new"><Button><Plus className="h-4 w-4" /> Crear primer expediente</Button></Link>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -91,7 +88,6 @@ function ShipmentsPage() {
         </CardContent>
       </Card>
 
-      <ShipmentForm open={showForm} onClose={() => setShowForm(false)} />
     </AppLayout>
   )
 }

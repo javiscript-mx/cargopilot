@@ -17,6 +17,7 @@ import { vehiclesRoutes } from "./routes/vehicles.js"
 import { operatorsRoutes } from "./routes/operators.js"
 import { merchandiseRoutes } from "./routes/merchandise.js"
 import { containersRoutes } from "./routes/containers.js"
+import { satRoutes } from "./routes/sat.js"
 
 const isDev = process.env["NODE_ENV"] === "development"
 
@@ -68,6 +69,7 @@ await app.register(vehiclesRoutes, { prefix: "/api" })
 await app.register(operatorsRoutes, { prefix: "/api" })
 await app.register(merchandiseRoutes, { prefix: "/api" })
 await app.register(containersRoutes, { prefix: "/api" })
+await app.register(satRoutes, { prefix: "/api" })
 
 // ─── Health check ────────────────────────────────────────────────────────────
 

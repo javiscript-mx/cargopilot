@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "./client.js"
 import { auth } from "../lib/auth.js"
+import { SAT_CATALOG_SEEDS } from "./sat-catalogs.seed.js"
 
 // ─── Catálogos default ───────────────────────────────────────────────────────
 
@@ -97,6 +98,22 @@ const CATALOG_SEEDS: { category: string; code: string; name: string; extra?: Pri
   { category: "port", code: "TAMP", name: "Puerto de Tampico" },
   { category: "port", code: "ALTR", name: "Altamira" },
 
+  // País fiscal / operativo (ISO 3166-1 alpha-2)
+  { category: "country", code: "MX", name: "México" },
+  { category: "country", code: "US", name: "Estados Unidos" },
+  { category: "country", code: "CA", name: "Canadá" },
+  { category: "country", code: "CN", name: "China" },
+  { category: "country", code: "ES", name: "España" },
+  { category: "country", code: "GT", name: "Guatemala" },
+  { category: "country", code: "BZ", name: "Belice" },
+
+  // Monedas frecuentes (ISO 4217)
+  { category: "currency", code: "MXN", name: "Peso mexicano" },
+  { category: "currency", code: "USD", name: "Dólar estadounidense" },
+  { category: "currency", code: "CAD", name: "Dólar canadiense" },
+  { category: "currency", code: "EUR", name: "Euro" },
+  { category: "currency", code: "CNY", name: "Yuan chino" },
+
   // Claves de producto/servicio SAT (forwarding)
   { category: "sat_product_key", code: "78101800", name: "Transporte de carga general" },
   { category: "sat_product_key", code: "78101801", name: "Transporte de carga aérea" },
@@ -120,28 +137,8 @@ const CATALOG_SEEDS: { category: string; code: string; name: string; extra?: Pri
   { category: "sat_unit_key", code: "XPL", name: "Plataforma" },
   { category: "sat_unit_key", code: "H87", name: "Pieza" },
 
-  // Uso CFDI SAT
-  { category: "sat_cfdi_use", code: "G01",  name: "Adquisición de mercancias" },
-  { category: "sat_cfdi_use", code: "G02",  name: "Devoluciones, descuentos o bonificaciones" },
-  { category: "sat_cfdi_use", code: "G03",  name: "Gastos en general" },
-  { category: "sat_cfdi_use", code: "I01",  name: "Construcciones" },
-  { category: "sat_cfdi_use", code: "I03",  name: "Equipo de transporte" },
-  { category: "sat_cfdi_use", code: "I08",  name: "Otra maquinaria y equipo" },
-  { category: "sat_cfdi_use", code: "S01",  name: "Sin efectos fiscales" },
-  { category: "sat_cfdi_use", code: "CP01", name: "Pagos" },
-  { category: "sat_cfdi_use", code: "CN01", name: "Nómina" },
-
-  // Formas de pago SAT
-  { category: "sat_payment_form", code: "01", name: "Efectivo" },
-  { category: "sat_payment_form", code: "02", name: "Cheque nominativo" },
-  { category: "sat_payment_form", code: "03", name: "Transferencia electrónica de fondos" },
-  { category: "sat_payment_form", code: "04", name: "Tarjeta de crédito" },
-  { category: "sat_payment_form", code: "28", name: "Tarjeta de débito" },
-  { category: "sat_payment_form", code: "99", name: "Por definir" },
-
-  // Métodos de pago SAT
-  { category: "sat_payment_method", code: "PUE", name: "Pago en una sola exhibición" },
-  { category: "sat_payment_method", code: "PPD", name: "Pago en parcialidades o diferido" },
+  // Uso CFDI, régimen fiscal, formas/métodos de pago y tipo de comprobante:
+  // ahora se siembran completos desde SAT_CATALOG_SEEDS (ver sat-catalogs.seed.ts).
 
   // Carta Porte — Configuración vehicular (c_ConfigAutotransporte)
   { category: "cp_config_vehicular", code: "VL",   name: "VL - Vehículo ligero de carga" },
@@ -185,26 +182,37 @@ async function main() {
   }
 
   // Cliente de prueba
-  const customer = await prisma.customer.upsert({
-    where: { rfc: "XAXX010101000" },
-    update: {},
-    create: {
+  let customer = await prisma.customer.findFirst({ where: { rfc: "XAXX010101000" } })
+  if (!customer) {
+    customer = await prisma.customer.create({
+      data: {
       name: "Cliente de Prueba SA de CV",
       rfc: "XAXX010101000",
       email: "prueba@ejemplo.com",
-    },
-  })
+      },
+    })
+  }
   console.log(`✓ Cliente de prueba: ${customer.name}`)
 
   // Catálogos default — crea solo si no existe un activo con ese (category, code).
   // (Ya no hay unique compuesto: la unicidad es parcial entre activos.)
   let catalogCount = 0
-  for (const item of CATALOG_SEEDS) {
+  for (const item of [...CATALOG_SEEDS, ...SAT_CATALOG_SEEDS]) {
     const exists = await prisma.catalogItem.findFirst({
       where: { category: item.category, code: item.code, active: true },
     })
+    const extra = (item as { extra?: unknown }).extra
     if (!exists) {
-      await prisma.catalogItem.create({ data: { ...item, active: true } })
+      await prisma.catalogItem.create({
+        data: {
+          category: item.category, code: item.code, name: item.name,
+          extra: extra ? (extra as Prisma.InputJsonValue) : Prisma.JsonNull,
+          active: true,
+        },
+      })
+    } else if (extra && JSON.stringify(exists.extra) !== JSON.stringify(extra)) {
+      // mantiene al día las banderas (persona física/moral, autotransporte...)
+      await prisma.catalogItem.update({ where: { id: exists.id }, data: { extra: extra as Prisma.InputJsonValue } })
     }
     catalogCount++
   }

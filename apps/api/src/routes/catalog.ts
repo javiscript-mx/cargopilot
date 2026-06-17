@@ -13,11 +13,15 @@ export const CATALOG_CATEGORIES = [
   "container_type",
   "incoterm",
   "port",
+  "country",
+  "currency",
   "sat_product_key",
   "sat_unit_key",
   "sat_cfdi_use",
   "sat_payment_form",
   "sat_payment_method",
+  "sat_tax_regime",
+  "sat_cfdi_type",
 ] as const
 
 export type CatalogCategory = typeof CATALOG_CATEGORIES[number]

@@ -75,20 +75,91 @@ model Verification {
 
 model Customer {
   id            String   @id @default(cuid())
-  name          String
-  rfc           String   @unique
+  name          String   // nombre visible / comercial
+  legalName     String?  // razón social legal/fiscal exacta
+  tradeName     String?  // nombre comercial alterno
+  rfc           String
   email         String?
   phone         String?
   address       Json?
   fiscalRegime  String?  // RegimenFiscalReceptor (CFDI 4.0)
   fiscalZipCode String?  // DomicilioFiscalReceptor — CP fiscal del receptor (CFDI 4.0)
+
+  status             String   @default("prospect") // prospect | active | suspended | blocked | inactive
+  customerType       String   @default("shipper")  // shipper | consignee | bill_to | importer | exporter | other
+  taxCountry         String   @default("MX")
+  foreignTaxId       String?
+  defaultCfdiUse     String?
+  defaultPaymentForm String?
+  defaultPaymentMethod String?
+  billingEmail       String?
+  creditTermsDays    Int?
+  creditLimit        Decimal? @db.Decimal(14, 2)
+  creditCurrency     String   @default("MXN")
+  salesOwner         String?
+  operationsNotes    String?
+  billingNotes       String?
+  complianceStatus   String   @default("pending") // pending | complete | expired | rejected
+  documentsStatus    String   @default("pending") // pending | complete | expired
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  contacts  CustomerContact[]
+  addresses CustomerAddress[]
   shipments Shipment[]
   invoices  Invoice[]
 
+  @@index([rfc])
+  @@index([status])
   @@map("customers")
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type       String   @default("operations") // operations | billing | collections | legal | executive | other
+  name       String
+  email      String?
+  phone      String?
+  mobile     String?
+  position   String?
+  isPrimary  Boolean  @default(false)
+  active     Boolean  @default(true)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId, type])
+  @@map("customer_contacts")
+}
+
+model CustomerAddress {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type       String   @default("commercial") // fiscal | commercial | pickup | delivery | warehouse | plant | port | other
+  label      String?
+  address    Json?
+  formatted  String?
+  street     String?
+  city       String?
+  state      String?
+  country    String?
+  postalCode String?
+  lat        Decimal? @db.Decimal(10, 7)
+  lng        Decimal? @db.Decimal(10, 7)
+  isPrimary  Boolean  @default(false)
+  active     Boolean  @default(true)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId, type])
+  @@map("customer_addresses")
 }
 
 model Shipment {
@@ -314,6 +385,24 @@ model Document {
   @@map("documents")
 }
 
+// Catálogos SAT grandes (normativos, inmutables) — separados de CatalogItem
+// porque tienen decenas de miles de filas y se consultan por búsqueda, no cargando todo.
+model SatProductKey {
+  code        String  @id // c_ClaveProdServ (8 dígitos)
+  description String
+  dangerous   Boolean @default(false) // material peligroso (is_dangerous)
+
+  @@map("sat_product_keys")
+}
+
+model SatUnitKey {
+  code   String  @id // c_ClaveUnidad
+  name   String
+  symbol String?
+
+  @@map("sat_unit_keys")
+}
+
 model Setting {
   key       String   @id
   value     Json
@@ -344,4 +433,3 @@ enum InvoiceStatus {
   stamped
   cancelled
 }
-

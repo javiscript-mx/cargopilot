@@ -159,7 +159,7 @@ export async function invoicesRoutes(app: FastifyInstance) {
         CfdiType: "I" as const,
         Receiver: {
           Rfc: customer.rfc,
-          Name: customer.name,
+          Name: customer.legalName ?? customer.name,
           CfdiUse: invoice.cfdiUse,
           FiscalRegime: customer.fiscalRegime,
           TaxZipCode: customer.fiscalZipCode,

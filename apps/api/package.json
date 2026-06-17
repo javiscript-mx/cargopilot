@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:import-sat": "tsx src/db/import-sat.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

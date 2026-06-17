@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 import { AppLayout } from "@/components/layout"
@@ -10,31 +10,22 @@ import { Button } from "@/components/ui/button"
 import { invoicesApi } from "@/api/invoices"
 import { customersApi } from "@/api/customers"
 import { shipmentsApi } from "@/api/shipments"
+import { useCatalog } from "@/hooks/use-catalog"
+import { Badge } from "@/components/ui/badge"
+import { SatPicker } from "@/components/ui/sat-picker"
+import { satApi } from "@/api/sat"
+import { personaType, PERSONA_LABEL } from "@/lib/fiscal"
 import { validateRequired, validateQuantity, validateUnitPrice } from "@/lib/validators"
 
 export const Route = createFileRoute("/invoices/new")({
   component: NewInvoicePage,
 })
 
-const CFDI_USES = [
-  { value: "G01", label: "G01 - Adquisición de mercancias" },
-  { value: "G03", label: "G03 - Gastos en general" },
-  { value: "S01", label: "S01 - Sin efectos fiscales" },
-  { value: "CP01", label: "CP01 - Pagos" },
-]
-
-const PAYMENT_FORMS = [
-  { value: "01", label: "01 - Efectivo" },
-  { value: "03", label: "03 - Transferencia electrónica" },
-  { value: "04", label: "04 - Tarjeta de crédito" },
-  { value: "28", label: "28 - Tarjeta de débito" },
-  { value: "99", label: "99 - Por definir" },
-]
-
-const PAYMENT_METHODS = [
-  { value: "PUE", label: "PUE - Pago en una sola exhibición" },
-  { value: "PPD", label: "PPD - Pago en parcialidades o diferido" },
-]
+// Búsqueda/resolución para los pickers SAT (catálogos grandes)
+const prodSearch = (q: string) => satApi.searchProdserv(q).then((r) => r.map((x) => ({ code: x.code, label: `${x.code} – ${x.description}` })))
+const prodResolve = (code: string) => satApi.getProdserv(code).then((r) => (r[0] ? { code: r[0].code, label: `${r[0].code} – ${r[0].description}` } : null))
+const uniSearch = (q: string) => satApi.searchUnidades(q).then((r) => r.map((x) => ({ code: x.code, label: `${x.code} – ${x.name}` })))
+const uniResolve = (code: string) => satApi.getUnidad(code).then((r) => (r[0] ? { code: r[0].code, label: `${r[0].code} – ${r[0].name}` } : null))
 
 interface LineItem { description: string; quantity: string; unitPrice: string; productCode: string; unitCode: string }
 const emptyItem = (): LineItem => ({ description: "", quantity: "1", unitPrice: "", productCode: "78101800", unitCode: "E48" })
@@ -44,6 +35,10 @@ function NewInvoicePage() {
   const queryClient = useQueryClient()
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
   const { data: shipments = [] } = useQuery({ queryKey: ["shipments"], queryFn: shipmentsApi.list })
+  const { items: cfdiUseItems } = useCatalog("sat_cfdi_use")
+  const { items: regimeItems } = useCatalog("sat_tax_regime")
+  const { options: paymentFormOptions } = useCatalog("sat_payment_form")
+  const { options: paymentMethodOptions } = useCatalog("sat_payment_method")
 
   const [customerId, setCustomerId] = useState("")
   const [shipmentId, setShipmentId] = useState("")
@@ -52,6 +47,41 @@ function NewInvoicePage() {
   const [paymentMethod, setPaymentMethod] = useState("PUE")
   const [items, setItems] = useState<LineItem[]>([emptyItem()])
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Receptor → persona (régimen fiscal autoritativo, RFC como respaldo) para filtrar el Uso CFDI
+  const selectedCustomer = customers.find((c) => c.id === customerId)
+  const regimeExtra = selectedCustomer
+    ? (regimeItems.find((r) => r.code === selectedCustomer.fiscalRegime)?.extra as { moral?: boolean; physical?: boolean } | null | undefined)
+    : null
+  const persona = selectedCustomer ? personaType(selectedCustomer.rfc, regimeExtra) : null
+  const cfdiUseOptions = cfdiUseItems
+    .filter((i) => {
+      if (!persona) return true
+      const e = i.extra as { moral?: boolean; physical?: boolean } | null
+      return persona === "fisica" ? e?.physical !== false : e?.moral !== false
+    })
+    .map((i) => ({ value: i.code, label: `${i.code} – ${i.name}` }))
+
+  // Método de pago manda sobre forma: PPD ⇒ forma "99 - Por definir"; PUE ⇒ forma real (sin 99)
+  const isPPD = paymentMethod === "PPD"
+  const formOptions = isPPD
+    ? paymentFormOptions.filter((o) => o.value === "99")
+    : paymentFormOptions.filter((o) => o.value !== "99")
+
+  function onPaymentMethodChange(v: string) {
+    setPaymentMethod(v)
+    if (v === "PPD") setPaymentForm("99")
+    else if (paymentForm === "99") setPaymentForm("03")
+  }
+
+  // Si el uso seleccionado no aplica al receptor, corrige al primero válido (G03 por defecto)
+  useEffect(() => {
+    if (!persona) return
+    if (!cfdiUseOptions.some((o) => o.value === cfdiUse)) {
+      setCfdiUse(cfdiUseOptions.find((o) => o.value === "G03")?.value ?? cfdiUseOptions[0]?.value ?? "")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, cfdiUseItems])
 
   const mutation = useMutation({
     mutationFn: invoicesApi.create,
@@ -122,14 +152,27 @@ function NewInvoicePage() {
         <Card>
           <CardHeader><CardTitle>Receptor</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Select
-              id="customerId" label="Cliente"
-              placeholder="Selecciona un cliente..."
-              options={customers.map((c) => ({ value: c.id, label: `${c.name} (${c.rfc})` }))}
-              value={customerId}
-              onChange={(e) => { setCustomerId(e.target.value); setShipmentId("") }}
-              error={errors["customerId"]}
-            />
+            <div className="flex flex-col gap-1.5">
+              <Select
+                id="customerId" label="Cliente"
+                placeholder="Selecciona un cliente..."
+                options={customers.map((c) => ({ value: c.id, label: `${c.name} (${c.rfc})` }))}
+                value={customerId}
+                onChange={(e) => {
+                  const nextCustomerId = e.target.value
+                  const customer = customers.find((c) => c.id === nextCustomerId)
+                  setCustomerId(nextCustomerId)
+                  setShipmentId("")
+                  setCfdiUse(customer?.defaultCfdiUse ?? "G03")
+                  setPaymentForm(customer?.defaultPaymentForm ?? "03")
+                  setPaymentMethod(customer?.defaultPaymentMethod ?? "PUE")
+                }}
+                error={errors["customerId"]}
+              />
+              {persona && (
+                <span><Badge variant="outline">{PERSONA_LABEL[persona]}</Badge></span>
+              )}
+            </div>
             <Select
               id="shipmentId" label="Expediente (opcional)"
               placeholder="Sin expediente"
@@ -138,9 +181,12 @@ function NewInvoicePage() {
               onChange={(e) => setShipmentId(e.target.value)}
               disabled={!customerId}
             />
-            <Select id="cfdiUse" label="Uso CFDI" options={CFDI_USES} value={cfdiUse} onChange={(e) => setCfdiUse(e.target.value)} />
-            <Select id="paymentForm" label="Forma de pago" options={PAYMENT_FORMS} value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} />
-            <Select id="paymentMethod" label="Método de pago" options={PAYMENT_METHODS} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} />
+            <Select id="cfdiUse" label="Uso CFDI" placeholder="Selecciona..." options={cfdiUseOptions} value={cfdiUse} onChange={(e) => setCfdiUse(e.target.value)} />
+            <Select id="paymentMethod" label="Método de pago" placeholder="Selecciona..." options={paymentMethodOptions} value={paymentMethod} onChange={(e) => onPaymentMethodChange(e.target.value)} />
+            <div className="flex flex-col gap-1">
+              <Select id="paymentForm" label="Forma de pago" placeholder="Selecciona..." options={formOptions} value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} disabled={isPPD} />
+              {isPPD && <p className="text-xs text-[--color-muted-foreground]">PPD usa forma "99 - Por definir" (regla SAT).</p>}
+            </div>
           </CardContent>
         </Card>
 
@@ -155,35 +201,49 @@ function NewInvoicePage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_80px_110px_36px] gap-2 items-start">
-                <Input
-                  placeholder="Descripción del servicio"
-                  value={item.description}
-                  onChange={(e) => updateItem(idx, "description", e.target.value)}
-                  error={errors[`item_${idx}_desc`]}
-                />
-                <Input
-                  placeholder="Cant."
-                  type="number" min="0.01" step="0.01"
-                  value={item.quantity}
-                  onChange={(e) => updateItem(idx, "quantity", e.target.value)}
-                  error={errors[`item_${idx}_qty`]}
-                />
-                <Input
-                  placeholder="Precio unit."
-                  type="number" min="0.01" step="0.01"
-                  value={item.unitPrice}
-                  onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
-                  error={errors[`item_${idx}_price`]}
-                />
-                <button
-                  type="button"
-                  onClick={() => setItems((p) => p.filter((_, i) => i !== idx))}
-                  disabled={items.length === 1}
-                  className="mt-1 h-8 w-8 flex items-center justify-center rounded hover:bg-red-50 text-[--color-muted-foreground] hover:text-[--color-destructive] disabled:opacity-30 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+              <div key={idx} className="flex flex-col gap-2 rounded-md border border-[--color-border] p-3">
+                <div className="grid grid-cols-[1fr_80px_110px_36px] items-start gap-2">
+                  <Input
+                    placeholder="Descripción del servicio"
+                    value={item.description}
+                    onChange={(e) => updateItem(idx, "description", e.target.value)}
+                    error={errors[`item_${idx}_desc`]}
+                  />
+                  <Input
+                    placeholder="Cant."
+                    type="number" min="0.01" step="0.01"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                    error={errors[`item_${idx}_qty`]}
+                  />
+                  <Input
+                    placeholder="Precio unit."
+                    type="number" min="0.01" step="0.01"
+                    value={item.unitPrice}
+                    onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
+                    error={errors[`item_${idx}_price`]}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setItems((p) => p.filter((_, i) => i !== idx))}
+                    disabled={items.length === 1}
+                    className="mt-1 flex h-8 w-8 items-center justify-center rounded text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive] disabled:opacity-30"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_220px]">
+                  <SatPicker
+                    label="Clave producto/servicio SAT" cacheKey="prodserv"
+                    value={item.productCode} onChange={(c) => updateItem(idx, "productCode", c)}
+                    search={prodSearch} resolve={prodResolve}
+                  />
+                  <SatPicker
+                    label="Clave unidad SAT" cacheKey="unidades" minChars={1}
+                    value={item.unitCode} onChange={(c) => updateItem(idx, "unitCode", c)}
+                    search={uniSearch} resolve={uniResolve}
+                  />
+                </div>
               </div>
             ))}
 

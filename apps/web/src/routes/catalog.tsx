@@ -39,6 +39,8 @@ const CATEGORY_HINTS: Record<string, string> = {
   sat_cfdi_use:       "Usos de CFDI que puede declarar el receptor.",
   sat_payment_form:   "Formas de pago reconocidas por el SAT.",
   sat_payment_method: "PUE (una exhibición) o PPD (parcialidades).",
+  sat_tax_regime:     "Regímenes fiscales del SAT (c_RegimenFiscal) para emisor y receptor.",
+  sat_cfdi_type:      "Tipo de comprobante (Ingreso, Egreso, Traslado, Pago, Nómina).",
   cp_config_vehicular: "Configuración vehicular SAT (C2, C3, T3S2...) para el complemento Carta Porte.",
   cp_perm_sct: "Tipo de permiso SCT/SICT del autotransporte (TPAF01...) para Carta Porte.",
 }

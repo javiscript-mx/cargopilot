@@ -5,6 +5,7 @@ import { Building2, Plus, Pencil } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { PaginationBar, SearchInput, PAGE_SIZE } from "@/components/ui/pagination"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { customersApi } from "@/api/customers"
@@ -12,6 +13,16 @@ import { customersApi } from "@/api/customers"
 export const Route = createFileRoute("/customers/")({
   component: CustomersPage,
 })
+
+const statusConfig: Record<string, { label: string; variant: "default" | "success" | "warning" | "destructive" | "outline" }> = {
+  prospect: { label: "Prospecto", variant: "outline" },
+  active: { label: "Activo", variant: "success" },
+  suspended: { label: "Suspendido", variant: "warning" },
+  blocked: { label: "Bloqueado", variant: "destructive" },
+  inactive: { label: "Inactivo", variant: "outline" },
+}
+
+const fallbackStatus = statusConfig["prospect"]!
 
 function CustomersPage() {
   const [page, setPage] = useState(1)
@@ -70,7 +81,15 @@ function CustomersPage() {
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium">{c.name}</p>
+                        {c.legalName && c.legalName !== c.name && (
+                          <p className="truncate text-xs text-[--color-muted-foreground]">{c.legalName}</p>
+                        )}
                         <p className="font-mono text-xs text-[--color-muted-foreground]">{c.rfc}</p>
+                        <div className="mt-1">
+                          <Badge variant={(statusConfig[c.status] ?? fallbackStatus).variant}>
+                            {(statusConfig[c.status] ?? fallbackStatus).label}
+                          </Badge>
+                        </div>
                         {(c.email || c.phone) && (
                           <p className="mt-0.5 truncate text-xs text-[--color-muted-foreground]">
                             {[c.email, c.phone].filter(Boolean).join(" · ")}
@@ -88,9 +107,11 @@ function CustomersPage() {
               <thead>
                 <tr className="border-b border-[--color-border]">
                   <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Nombre</th>
+                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Razón social</th>
                   <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">RFC</th>
                   <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Correo</th>
                   <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Teléfono</th>
+                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Estatus</th>
                   <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Alta</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -99,9 +120,15 @@ function CustomersPage() {
                 {customers.map((c) => (
                   <tr key={c.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/50">
                     <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 text-[--color-muted-foreground]">{c.legalName ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs">{c.rfc}</td>
                     <td className="px-4 py-3 text-[--color-muted-foreground]">{c.email ?? "—"}</td>
                     <td className="px-4 py-3 text-[--color-muted-foreground]">{c.phone ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={(statusConfig[c.status] ?? fallbackStatus).variant}>
+                        {(statusConfig[c.status] ?? fallbackStatus).label}
+                      </Badge>
+                    </td>
                     <td className="px-4 py-3 text-[--color-muted-foreground]">
                       {new Date(c.createdAt).toLocaleDateString("es-MX")}
                     </td>

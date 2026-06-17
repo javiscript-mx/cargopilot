@@ -8,12 +8,16 @@ export const CATALOG_CATEGORY_LABELS: Record<string, string> = {
   container_type:      "Tipo de contenedor",
   incoterm:            "Incoterm",
   port:                "Puerto / Aeropuerto",
+  country:             "País",
+  currency:            "Moneda",
   milestone:           "Hitos de trazabilidad",
   sat_product_key:     "Clave producto SAT",
   sat_unit_key:        "Clave unidad SAT",
   sat_cfdi_use:        "Uso CFDI",
   sat_payment_form:    "Forma de pago",
   sat_payment_method:  "Método de pago",
+  sat_tax_regime:      "Régimen fiscal",
+  sat_cfdi_type:       "Tipo de comprobante",
   cp_config_vehicular: "Config. vehicular (Carta Porte)",
   cp_perm_sct:         "Permiso SCT (Carta Porte)",
 }
@@ -22,11 +26,11 @@ export const CATALOG_CATEGORY_LABELS: Record<string, string> = {
 export const CATALOG_GROUPS = [
   {
     label: "Operación",
-    categories: ["supplier_type", "service_type", "transport_mode", "cargo_type", "container_type", "incoterm", "port", "milestone"],
+    categories: ["supplier_type", "service_type", "transport_mode", "cargo_type", "container_type", "incoterm", "port", "country", "currency", "milestone"],
   },
   {
     label: "SAT / Facturación",
-    categories: ["sat_product_key", "sat_unit_key", "sat_cfdi_use", "sat_payment_form", "sat_payment_method"],
+    categories: ["sat_tax_regime", "sat_cfdi_use", "sat_cfdi_type", "sat_payment_form", "sat_payment_method", "sat_product_key", "sat_unit_key"],
   },
   {
     label: "Carta Porte",

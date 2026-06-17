@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { settingsApi, type AppSettings } from "@/api/settings"
 import { useSettings, SETTINGS_DEFAULTS } from "@/hooks/use-settings"
+import { useCatalog } from "@/hooks/use-catalog"
 import { authClient } from "@/lib/auth-client"
 import { validateRfc, validateCp, validateSeries, validateFolioPrefix, validateRequired, validateGcsBucket, collectErrors } from "@/lib/validators"
 
@@ -20,18 +21,6 @@ export const Route = createFileRoute("/settings")({
   },
   component: SettingsPage,
 })
-
-const REGIMEN_FISCAL_OPTIONS = [
-  { value: "601", label: "601 – General de Ley Personas Morales" },
-  { value: "603", label: "603 – Personas Morales con Fines no Lucrativos" },
-  { value: "605", label: "605 – Sueldos y Salarios e Ingresos Asimilados" },
-  { value: "606", label: "606 – Arrendamiento" },
-  { value: "608", label: "608 – Demás ingresos" },
-  { value: "612", label: "612 – Personas Físicas con Actividades Empresariales" },
-  { value: "616", label: "616 – Sin obligaciones fiscales" },
-  { value: "621", label: "621 – Incorporación Fiscal" },
-  { value: "626", label: "626 – Régimen Simplificado de Confianza" },
-]
 
 const TIMEZONE_OPTIONS = [
   { value: "America/Mexico_City", label: "Ciudad de México (CST/CDT)" },
@@ -55,6 +44,7 @@ const COUNTRY_OPTIONS = [
 function SettingsPage() {
   const queryClient = useQueryClient()
   const { settings, isLoading } = useSettings()
+  const { options: regimenOptions } = useCatalog("sat_tax_regime")
   const [form, setForm] = useState<AppSettings>(SETTINGS_DEFAULTS)
   const [saved, setSaved] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -239,7 +229,7 @@ function SettingsPage() {
               label="Régimen fiscal"
               value={form["invoicing.regimenFiscal"] as string}
               onChange={(e) => set("invoicing.regimenFiscal", e.target.value)}
-              options={REGIMEN_FISCAL_OPTIONS}
+              options={regimenOptions}
             />
           </CardContent>
         </Card>

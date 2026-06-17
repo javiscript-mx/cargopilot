@@ -5,6 +5,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router"
 import "./index.css"
 
 import { routeTree } from "./routeTree.gen"
+import { ToastProvider } from "@/components/ui/toast"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,7 +28,9 @@ const root = document.getElementById("root")!
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

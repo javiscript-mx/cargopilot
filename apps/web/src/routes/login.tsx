@@ -4,6 +4,7 @@ import { signIn } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Logo } from "@/components/ui/logo"
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -38,7 +39,10 @@ function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-[--color-muted] p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <div className="mb-2 text-2xl font-bold text-[--color-primary]">HM Sistema</div>
+          <div className="mb-3 flex items-center gap-3">
+            <Logo size={44} tile className="text-white" />
+            <span className="text-2xl font-bold text-[--color-primary]">HM Sistema</span>
+          </div>
           <CardTitle>Iniciar sesión</CardTitle>
         </CardHeader>
         <CardContent>

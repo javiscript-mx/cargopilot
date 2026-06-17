@@ -1,11 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { Package, Building2, FileText, TrendingUp } from "lucide-react"
+import { Package, Building2, FileText, TrendingUp, ArrowRight, CircleDashed } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { shipmentsApi } from "@/api/shipments"
+import { Badge } from "@/components/ui/badge"
+import { shipmentsApi, STATUS_CONFIG, type Shipment } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { invoicesApi } from "@/api/invoices"
+import { useCatalog } from "@/hooks/use-catalog"
 
 export const Route = createFileRoute("/")({
   component: DashboardPage,
@@ -33,14 +35,45 @@ function StatCard({ title, value, icon: Icon, description }: {
   )
 }
 
+/** Ruta para fletes, referencia para servicios, — si no hay nada */
+function operationContext(s: Shipment): React.ReactNode {
+  if (s.origin && s.destination) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="max-w-[120px] truncate">{s.origin}</span>
+        <ArrowRight className="h-3 w-3 shrink-0" />
+        <span className="max-w-[120px] truncate">{s.destination}</span>
+      </span>
+    )
+  }
+  if (s.reference) return <span className="font-mono text-xs">{s.reference}</span>
+  if (s.cargo?.description) return <span className="max-w-[240px] truncate">{s.cargo.description}</span>
+  return "—"
+}
+
 function DashboardPage() {
   const { data: shipments = [] } = useQuery({ queryKey: ["shipments"], queryFn: shipmentsApi.list })
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
   const { data: invoices = [] } = useQuery({ queryKey: ["invoices"], queryFn: invoicesApi.list })
+  const { items: operationTypes } = useCatalog("service_type")
+
+  const opLabel = (code: string) => operationTypes.find((t) => t.code === code)?.name ?? code
 
   const activeShipments = shipments.filter((s) => !["delivered", "cancelled"].includes(s.status))
+  const inProgress = shipments.filter((s) => s.status === "in_transit")
+  const drafts = shipments.filter((s) => s.status === "draft")
   const stampedInvoices = invoices.filter((i) => i.status === "stamped")
   const totalBilled = stampedInvoices.reduce((acc, i) => acc + parseFloat(i.total), 0)
+
+  // Mix de operaciones activas por tipo — impo, expo, servicios, todo cuenta igual
+  const byType = activeShipments.reduce<Record<string, number>>((acc, s) => {
+    acc[s.operationType] = (acc[s.operationType] ?? 0) + 1
+    return acc
+  }, {})
+  const typeBreakdown = Object.entries(byType)
+    .map(([code, count]) => ({ code, label: opLabel(code), count }))
+    .sort((a, b) => b.count - a.count)
+  const maxTypeCount = Math.max(1, ...typeBreakdown.map((t) => t.count))
 
   return (
     <AppLayout>
@@ -51,10 +84,10 @@ function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Expedientes activos"
+          title="Operaciones activas"
           value={activeShipments.length}
           icon={Package}
-          description={`${shipments.length} en total`}
+          description={`${inProgress.length} en proceso · ${drafts.length} en borrador`}
         />
         <StatCard
           title="Clientes"
@@ -75,34 +108,53 @@ function DashboardPage() {
         />
       </div>
 
-      <div className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Expedientes recientes</h2>
-        <Card>
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
+        {/* ── Operaciones recientes ── */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Operaciones recientes</CardTitle>
+              <Link to="/shipments" className="text-sm text-[--color-primary] hover:underline">
+                Ver todas
+              </Link>
+            </div>
+          </CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[--color-border]">
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Folio</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Cliente</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Origen → Destino</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Estado</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Folio</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Operación</th>
+                  <th className="hidden px-4 py-2.5 text-left font-medium text-[--color-muted-foreground] md:table-cell">Cliente</th>
+                  <th className="hidden px-4 py-2.5 text-left font-medium text-[--color-muted-foreground] xl:table-cell">Ruta / Referencia</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {shipments.slice(0, 5).map((s) => (
-                  <tr key={s.id} className="border-b border-[--color-border] last:border-0">
-                    <td className="px-4 py-3 font-mono font-medium">{s.folio}</td>
-                    <td className="px-4 py-3">{s.customer.name}</td>
-                    <td className="px-4 py-3 text-[--color-muted-foreground]">{s.origin} → {s.destination}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={s.status} />
-                    </td>
-                  </tr>
-                ))}
+                {shipments.slice(0, 8).map((s) => {
+                  const status = STATUS_CONFIG[s.status] ?? { label: s.status, variant: "outline" as const }
+                  return (
+                    <tr key={s.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/40">
+                      <td className="px-4 py-2.5">
+                        <Link to="/shipments/$id" params={{ id: s.id }} className="font-mono font-medium text-[--color-primary] hover:underline">
+                          {s.folio}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5">{opLabel(s.operationType)}</td>
+                      <td className="hidden px-4 py-2.5 md:table-cell">{s.customer.name}</td>
+                      <td className="hidden px-4 py-2.5 text-[--color-muted-foreground] xl:table-cell">
+                        {operationContext(s)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                      </td>
+                    </tr>
+                  )
+                })}
                 {shipments.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-[--color-muted-foreground]">
-                      No hay expedientes aún
+                    <td colSpan={5} className="px-4 py-8 text-center text-[--color-muted-foreground]">
+                      No hay operaciones aún
                     </td>
                   </tr>
                 )}
@@ -110,24 +162,39 @@ function DashboardPage() {
             </table>
           </CardContent>
         </Card>
+
+        {/* ── Mix de operaciones activas ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Operaciones activas por tipo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {typeBreakdown.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-[--color-muted-foreground]">
+                <CircleDashed className="h-8 w-8 opacity-30" />
+                <p className="text-sm">Sin operaciones activas</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {typeBreakdown.map(({ code, label, count }) => (
+                  <div key={code}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span>{label}</span>
+                      <span className="font-semibold tabular-nums">{count}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[--color-muted]">
+                      <div
+                        className="h-full rounded-full bg-[--color-primary]"
+                        style={{ width: `${(count / maxTypeCount) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
-  )
-}
-
-const statusLabels: Record<string, { label: string; color: string }> = {
-  draft: { label: "Borrador", color: "bg-gray-100 text-gray-700" },
-  confirmed: { label: "Confirmado", color: "bg-blue-100 text-blue-700" },
-  in_transit: { label: "En tránsito", color: "bg-yellow-100 text-yellow-700" },
-  delivered: { label: "Entregado", color: "bg-green-100 text-green-700" },
-  cancelled: { label: "Cancelado", color: "bg-red-100 text-red-700" },
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const { label, color } = statusLabels[status] ?? { label: status, color: "bg-gray-100 text-gray-700" }
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}>
-      {label}
-    </span>
   )
 }

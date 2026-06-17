@@ -1,8 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
 import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft } from "lucide-react"
-import { Link } from "@tanstack/react-router"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,45 +9,59 @@ import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { AddressInput, type AddressValue } from "@/components/ui/address-input"
 import { customersApi } from "@/api/customers"
-import { documentsApi } from "@/api/documents"
-import { PendingFilesPicker } from "@/components/ui/documents-section"
+import { DocumentsSection } from "@/components/ui/documents-section"
 import { REGIMEN_FISCAL_OPTIONS } from "@/lib/sat-catalogs"
 import { validateRfc, validateEmail, validatePhone, validateRequired, validateCp, collectErrors } from "@/lib/validators"
 
-export const Route = createFileRoute("/customers/new")({
-  component: NewCustomerPage,
+export const Route = createFileRoute("/customers/$id/edit")({
+  component: EditCustomerPage,
 })
 
-function NewCustomerPage() {
+function EditCustomerPage() {
+  const { id } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({ name: "", rfc: "", email: "", phone: "", address: "", fiscalRegime: "", fiscalZipCode: "" })
+
+  const { data: customer, isLoading } = useQuery({
+    queryKey: ["customers", id],
+    queryFn: () => customersApi.get(id),
+  })
+
+  const [form, setForm] = useState<{
+    name: string; rfc: string; email: string; phone: string; address: string
+    fiscalRegime: string; fiscalZipCode: string
+  } | null>(null)
   const [addressDetail, setAddressDetail] = useState<AddressValue | undefined>()
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Initialize form once customer loads
+  const initialized = form !== null
+  if (customer && !initialized) {
+    const addr = customer.address as { formatted?: string } | null
+    setForm({
+      name: customer.name,
+      rfc: customer.rfc,
+      email: customer.email ?? "",
+      phone: customer.phone ?? "",
+      address: addr?.formatted ?? "",
+      fiscalRegime: customer.fiscalRegime ?? "",
+      fiscalZipCode: customer.fiscalZipCode ?? "",
+    })
+  }
+
   const mutation = useMutation({
-    mutationFn: customersApi.create,
-    onSuccess: async (customer) => {
-      // Sube los documentos seleccionados ya con el id del cliente
-      const failed: string[] = []
-      for (const file of pendingFiles) {
-        try {
-          await documentsApi.upload("customer", customer.id, file)
-        } catch {
-          failed.push(file.name)
-        }
-      }
+    mutationFn: (data: Parameters<typeof customersApi.update>[1]) =>
+      customersApi.update(id, data),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customers"] })
-      if (failed.length) {
-        alert(`Cliente creado, pero fallaron estos archivos: ${failed.join(", ")}. Puedes reintentarlo desde Editar.`)
-      }
+      queryClient.invalidateQueries({ queryKey: ["customers", id] })
       navigate({ to: "/customers" })
     },
     onError: (err: Error) => setErrors({ general: err.message }),
   })
 
   function validate() {
+    if (!form) return {}
     return collectErrors({
       name: validateRequired(form.name, "Nombre"),
       rfc: validateRfc(form.rfc),
@@ -60,6 +73,7 @@ function NewCustomerPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form) return
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
     setErrors({})
@@ -74,45 +88,55 @@ function NewCustomerPage() {
     })
   }
 
+  if (isLoading || !form) {
+    return (
+      <AppLayout>
+        <div className="flex h-40 items-center justify-center text-[--color-muted-foreground]">
+          Cargando...
+        </div>
+      </AppLayout>
+    )
+  }
+
   return (
     <AppLayout>
       <div className="mb-6">
         <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
           <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
-        <h1 className="text-2xl font-bold">Nuevo cliente</h1>
+        <h1 className="text-2xl font-bold">Editar cliente</h1>
       </div>
 
-      <Card className="max-w-lg">
-        <CardHeader><CardTitle>Datos del cliente</CardTitle></CardHeader>
+      <div className="flex max-w-lg flex-col gap-4">
+      <Card>
+        <CardHeader><CardTitle>{customer?.name}</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <Input
               id="name" label="Nombre / Razón social"
-              value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              error={errors["name"]} placeholder="Transportes Ejemplo SA de CV"
+              value={form.name} onChange={(e) => setForm((f) => f && ({ ...f, name: e.target.value }))}
+              error={errors["name"]}
             />
             <Input
               id="rfc" label="RFC"
-              value={form.rfc} onChange={(e) => setForm((f) => ({ ...f, rfc: e.target.value.toUpperCase() }))}
-              error={errors["rfc"]} placeholder="TES010101ABC" maxLength={13}
+              value={form.rfc} onChange={(e) => setForm((f) => f && ({ ...f, rfc: e.target.value.toUpperCase() }))}
+              error={errors["rfc"]} maxLength={13}
             />
             <Input
               id="email" label="Correo electrónico (opcional)" type="email"
-              value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              value={form.email} onChange={(e) => setForm((f) => f && ({ ...f, email: e.target.value }))}
               error={errors["email"]}
             />
             <Input
               id="phone" label="Teléfono (opcional)"
-              value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              value={form.phone} onChange={(e) => setForm((f) => f && ({ ...f, phone: e.target.value }))}
               error={errors["phone"]}
             />
             <AddressInput
               id="address" label="Dirección (opcional)"
               value={form.address}
-              placeholder="Busca una dirección..."
               onChange={(formatted, detail) => {
-                setForm((f) => ({ ...f, address: formatted }))
+                setForm((f) => f && ({ ...f, address: formatted }))
                 setAddressDetail(detail)
               }}
             />
@@ -125,26 +149,27 @@ function NewCustomerPage() {
                   placeholder="Selecciona..."
                   options={REGIMEN_FISCAL_OPTIONS}
                   value={form.fiscalRegime}
-                  onChange={(e) => setForm((f) => ({ ...f, fiscalRegime: e.target.value }))}
+                  onChange={(e) => setForm((f) => f && ({ ...f, fiscalRegime: e.target.value }))}
                 />
                 <Input
                   id="fiscalZipCode" label="CP fiscal"
                   value={form.fiscalZipCode}
-                  onChange={(e) => setForm((f) => ({ ...f, fiscalZipCode: e.target.value }))}
+                  onChange={(e) => setForm((f) => f && ({ ...f, fiscalZipCode: e.target.value }))}
                   error={errors["fiscalZipCode"]} placeholder="06600" maxLength={5}
                 />
               </div>
             </div>
-
-            <PendingFilesPicker files={pendingFiles} onChange={setPendingFiles} disabled={mutation.isPending} />
             {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
             <div className="flex gap-3 pt-2">
               <Link to="/customers"><Button type="button" variant="outline">Cancelar</Button></Link>
-              <Button type="submit" loading={mutation.isPending}>Guardar cliente</Button>
+              <Button type="submit" loading={mutation.isPending}>Guardar cambios</Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      <DocumentsSection entityType="customer" entityId={id} />
+      </div>
     </AppLayout>
   )
 }

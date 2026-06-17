@@ -13,8 +13,7 @@ export function StampDialog({ invoice, onClose }: StampDialogProps) {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: ({ id, items }: { id: string; items: Invoice[] }) =>
-      invoicesApi.stamp(id, items),
+    mutationFn: (id: string) => invoicesApi.stamp(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] })
       onClose()
@@ -74,7 +73,7 @@ export function StampDialog({ invoice, onClose }: StampDialogProps) {
           </Button>
           <Button
             loading={mutation.isPending}
-            onClick={() => mutation.mutate({ id: invoice.id, items: [] })}
+            onClick={() => mutation.mutate(invoice.id)}
           >
             Confirmar y timbrar
           </Button>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { invoicesApi } from "@/api/invoices"
 import { customersApi } from "@/api/customers"
 import { shipmentsApi } from "@/api/shipments"
+import { validateRequired, validateQuantity, validateUnitPrice } from "@/lib/validators"
 
 export const Route = createFileRoute("/invoices/new")({
   component: NewInvoicePage,
@@ -30,6 +31,11 @@ const PAYMENT_FORMS = [
   { value: "99", label: "99 - Por definir" },
 ]
 
+const PAYMENT_METHODS = [
+  { value: "PUE", label: "PUE - Pago en una sola exhibición" },
+  { value: "PPD", label: "PPD - Pago en parcialidades o diferido" },
+]
+
 interface LineItem { description: string; quantity: string; unitPrice: string; productCode: string; unitCode: string }
 const emptyItem = (): LineItem => ({ description: "", quantity: "1", unitPrice: "", productCode: "78101800", unitCode: "E48" })
 
@@ -43,6 +49,7 @@ function NewInvoicePage() {
   const [shipmentId, setShipmentId] = useState("")
   const [cfdiUse, setCfdiUse] = useState("G03")
   const [paymentForm, setPaymentForm] = useState("03")
+  const [paymentMethod, setPaymentMethod] = useState("PUE")
   const [items, setItems] = useState<LineItem[]>([emptyItem()])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -63,10 +70,16 @@ function NewInvoicePage() {
     const e: Record<string, string> = {}
     if (!customerId) e["customerId"] = "Selecciona un cliente"
     items.forEach((item, i) => {
-      if (!item.description.trim()) e[`item_${i}_desc`] = "Requerido"
-      if (!item.quantity || parseFloat(item.quantity) <= 0) e[`item_${i}_qty`] = "Inválido"
-      if (!item.unitPrice || parseFloat(item.unitPrice) <= 0) e[`item_${i}_price`] = "Inválido"
+      const desc = validateRequired(item.description, "Descripción")
+      if (desc) e[`item_${i}_desc`] = desc
+      const qty = validateQuantity(item.quantity)
+      if (qty) e[`item_${i}_qty`] = qty
+      const price = validateUnitPrice(item.unitPrice)
+      if (price) e[`item_${i}_price`] = price
     })
+    // El SAT rechaza CFDI con total en cero
+    const total = items.reduce((acc, it) => acc + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0)
+    if (!Object.keys(e).length && total <= 0) e["general"] = "El total de la factura debe ser mayor a cero"
     return e
   }
 
@@ -79,6 +92,8 @@ function NewInvoicePage() {
       customerId,
       ...(shipmentId ? { shipmentId } : {}),
       cfdiUse,
+      paymentForm,
+      paymentMethod,
       items: items.map((item) => ({
         description: item.description,
         quantity: parseFloat(item.quantity),
@@ -125,6 +140,7 @@ function NewInvoicePage() {
             />
             <Select id="cfdiUse" label="Uso CFDI" options={CFDI_USES} value={cfdiUse} onChange={(e) => setCfdiUse(e.target.value)} />
             <Select id="paymentForm" label="Forma de pago" options={PAYMENT_FORMS} value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} />
+            <Select id="paymentMethod" label="Método de pago" options={PAYMENT_METHODS} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} />
           </CardContent>
         </Card>
 

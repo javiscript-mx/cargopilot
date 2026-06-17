@@ -8,3 +8,6 @@ dist
 .DS_Store
 .next
 coverage
+.env.prod
+.storage
+.tanstack

@@ -1,0 +1,30 @@
+# Caddy obtiene y renueva certificados Let's Encrypt automáticamente.
+{$DOMAIN} {
+	tls {$ACME_EMAIL}
+
+	# API y docs van al backend Fastify
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+	handle /docs* {
+		reverse_proxy api:3001
+	}
+	handle /health {
+		reverse_proxy api:3001
+	}
+
+	# Todo lo demás: SPA estática
+	handle {
+		reverse_proxy web:80
+	}
+
+	# Compresión y headers de seguridad básicos
+	encode gzip zstd
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

@@ -5,7 +5,7 @@ WORKDIR /app
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 FROM base AS deps
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/web/package.json ./apps/web/
 RUN pnpm install --frozen-lockfile
@@ -21,9 +21,11 @@ CMD ["pnpm", "--filter", "@hm/web", "dev", "--host"]
 FROM deps AS builder
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
-# La URL del API se inyecta en build time
+# Variables de build de Vite (se hornean en el bundle)
 ARG VITE_API_URL=http://localhost:3001
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_GOOGLE_MAPS_API_KEY=
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 RUN pnpm --filter @hm/web build
 
 # ─── Production (nginx sirve el build estático) ────────────────────────────────

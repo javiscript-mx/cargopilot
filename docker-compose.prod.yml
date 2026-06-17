@@ -1,0 +1,91 @@
+# ─── Producción en VPS ─────────────────────────────────────────────────────────
+# Uso:
+#   cp .env.prod.example .env.prod   (y llenar valores)
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Arquitectura:
+#   Caddy (80/443, TLS automático) ──► /api/* → api:3001
+#                                  └─► /*     → web (nginx estático)
+#   Postgres solo accesible en la red interna de Docker.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:-hm_sistema}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-hm_sistema}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Sin "ports:" — la BD no se expone al exterior
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: production
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hm_sistema}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+      BETTER_AUTH_URL: https://${DOMAIN:?}
+      CORS_ORIGIN: https://${DOMAIN}
+      FACTURAMA_USER: ${FACTURAMA_USER:-}
+      FACTURAMA_PASSWORD: ${FACTURAMA_PASSWORD:-}
+      FACTURAMA_SANDBOX: ${FACTURAMA_SANDBOX:-true}
+      EMISOR_CP: ${EMISOR_CP:-}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-}
+      GCS_CREDENTIALS_JSON: ${GCS_CREDENTIALS_JSON:-}
+      # Documentos en disco cuando NO se usa GCS — persisten en el volumen
+      DOCS_STORAGE_DIR: /app/.storage/documents
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-}
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+    volumes:
+      # Persiste los documentos subidos entre despliegues (modo local, sin GCS)
+      - documents_data:/app/.storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Sin "ports:" — solo Caddy le habla
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?}
+      ACME_EMAIL: ${ACME_EMAIL:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+  documents_data:

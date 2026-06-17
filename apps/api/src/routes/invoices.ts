@@ -1,32 +1,53 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
 import { requireAuth, requireRole } from "../middleware/require-auth.js"
 import { createCFDI, cancelCFDI, getCFDIPdf, getCFDIXml } from "../lib/facturama.js"
+import { withFolioRetry, folioNumber } from "../lib/folio.js"
+import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
+
+const InvoiceItemSchema = z.object({
+  description: z.string().min(1),
+  quantity: z.number().positive(),
+  unitPrice: z.number().positive(),
+  productCode: z.string().default("78101800"), // Transporte de carga
+  unitCode: z.string().default("E48"),
+})
+type InvoiceItem = z.infer<typeof InvoiceItemSchema>
 
 const CreateInvoiceSchema = z.object({
   customerId: z.string(),
   shipmentId: z.string().optional(),
-  items: z.array(
-    z.object({
-      description: z.string(),
-      quantity: z.number().positive(),
-      unitPrice: z.number().positive(),
-      productCode: z.string().default("78101800"), // Transporte de carga
-      unitCode: z.string().default("E48"),
-    }),
-  ),
+  items: z.array(InvoiceItemSchema).min(1, "Agrega al menos un concepto"),
   cfdiUse: z.string().default("G03"),
   paymentForm: z.string().default("03"),
+  paymentMethod: z.string().default("PUE"),
   series: z.string().default("A"),
 })
 
+// Lee un setting string con fallback
+async function getSetting(key: string, fallback: string): Promise<string> {
+  const row = await prisma.setting.findUnique({ where: { key } })
+  return typeof row?.value === "string" && row.value.trim() ? row.value.trim() : fallback
+}
+
 export async function invoicesRoutes(app: FastifyInstance) {
-  app.get("/invoices", { preHandler: requireAuth }, async (_request, reply) => {
-    const invoices = await prisma.invoice.findMany({
-      include: { customer: { select: { id: true, name: true, rfc: true } } },
-      orderBy: { createdAt: "desc" },
-    })
+  app.get("/invoices", { preHandler: requireAuth }, async (request, reply) => {
+    const include = { customer: { select: { id: true, name: true, rfc: true } } }
+    const paging = parsePaging(request.query)
+    if (!paging) {
+      const invoices = await prisma.invoice.findMany({ include, orderBy: { createdAt: "desc" } })
+      return reply.send(invoices)
+    }
+    const where = paging.search
+      ? { OR: searchOr(paging.search, ["folio", "series", "customer.name", "customer.rfc"]) }
+      : {}
+    const [total, invoices] = await prisma.$transaction([
+      prisma.invoice.count({ where }),
+      prisma.invoice.findMany({ where, include, orderBy: { createdAt: "desc" }, skip: paging.skip, take: paging.take }),
+    ])
+    setTotal(reply, total)
     return reply.send(invoices)
   })
 
@@ -60,21 +81,31 @@ export async function invoicesRoutes(app: FastifyInstance) {
       const tax = subtotal * 0.16
       const total = subtotal + tax
 
-      const count = await prisma.invoice.count({ where: { series: body.data.series } })
-      const folio = String(count + 1).padStart(5, "0")
+      // Folio por serie basado en el máximo (no count): sin colisión tras borrados.
+      const series = body.data.series
+      const nextFolio = async () => {
+        const rows = await prisma.invoice.findMany({ where: { series }, select: { folio: true } })
+        const max = rows.reduce((m, r) => Math.max(m, folioNumber(r.folio)), 0)
+        return String(max + 1).padStart(5, "0")
+      }
 
-      const invoice = await prisma.invoice.create({
-        data: {
-          series: body.data.series,
-          folio,
-          customerId: body.data.customerId,
-          shipmentId: body.data.shipmentId ?? null,
-          cfdiUse: body.data.cfdiUse,
-          subtotal,
-          tax,
-          total,
-        },
-      })
+      const invoice = await withFolioRetry(async () =>
+        prisma.invoice.create({
+          data: {
+            series,
+            folio: await nextFolio(),
+            customerId: body.data.customerId,
+            shipmentId: body.data.shipmentId ?? null,
+            cfdiUse: body.data.cfdiUse,
+            paymentForm: body.data.paymentForm,
+            paymentMethod: body.data.paymentMethod,
+            items: body.data.items as unknown as Prisma.InputJsonValue,
+            subtotal,
+            tax,
+            total,
+          },
+        }),
+      )
 
       return reply.status(201).send(invoice)
     },
@@ -97,31 +128,41 @@ export async function invoicesRoutes(app: FastifyInstance) {
         return reply.status(409).send({ error: "Solo se pueden timbrar facturas en borrador" })
       }
 
-      const { items } = request.body as {
-        items: {
-          description: string
-          quantity: number
-          unitPrice: number
-          productCode: string
-          unitCode: string
-        }[]
+      // Conceptos: SIEMPRE desde la BD (no del request) — son los del borrador
+      const items = (invoice.items as unknown as InvoiceItem[] | null) ?? []
+      if (items.length === 0) {
+        return reply.status(422).send({ error: "La factura no tiene conceptos para timbrar" })
       }
 
-      const taxZipCode = process.env["EMISOR_CP"] ?? "06600"
+      // Datos fiscales del receptor (obligatorios en CFDI 4.0)
+      const { customer } = invoice
+      if (!customer.fiscalRegime || !customer.fiscalZipCode) {
+        return reply.status(422).send({
+          error: "El cliente no tiene régimen fiscal y/o CP fiscal. Complétalos en el cliente para poder timbrar.",
+        })
+      }
+
+      // Datos del emisor (lugar de expedición) desde Configuración
+      const expeditionPlace = await getSetting("invoicing.emisorCp", process.env["EMISOR_CP"] ?? "")
+      if (!expeditionPlace) {
+        return reply.status(422).send({
+          error: "Falta el CP del emisor. Configúralo en Configuración → Facturación.",
+        })
+      }
 
       const payload = {
         Serie: invoice.series,
         Currency: "MXN",
-        ExpeditionPlace: taxZipCode,
-        PaymentForm: "03",
-        PaymentMethod: "PUE",
+        ExpeditionPlace: expeditionPlace,
+        PaymentForm: invoice.paymentForm,
+        PaymentMethod: invoice.paymentMethod,
         CfdiType: "I" as const,
         Receiver: {
-          Rfc: invoice.customer.rfc,
-          Name: invoice.customer.name,
+          Rfc: customer.rfc,
+          Name: customer.name,
           CfdiUse: invoice.cfdiUse,
-          FiscalRegime: "616",
-          TaxZipCode: taxZipCode,
+          FiscalRegime: customer.fiscalRegime,
+          TaxZipCode: customer.fiscalZipCode,
         },
         Items: items.map((item) => {
           const subtotal = item.quantity * item.unitPrice
@@ -149,7 +190,14 @@ export async function invoicesRoutes(app: FastifyInstance) {
         }),
       }
 
-      const result = await createCFDI(payload)
+      let result: { Id: string }
+      try {
+        result = await createCFDI(payload)
+      } catch (err) {
+        request.log.error(err, "Error timbrando con Facturama")
+        const message = err instanceof Error ? err.message : "Error al timbrar"
+        return reply.status(502).send({ error: message })
+      }
 
       const updated = await prisma.invoice.update({
         where: { id },
@@ -160,19 +208,23 @@ export async function invoicesRoutes(app: FastifyInstance) {
         },
       })
 
-      // Guardar XML en background (no bloqueamos la respuesta)
-      getCFDIXml(result.Id)
-        .then((xmlBase64) => {
-          const xml = Buffer.from(xmlBase64, "base64").toString("utf-8")
-          return prisma.invoice.update({ where: { id }, data: { xmlContent: xml } })
+      // Intento best-effort de cachear el XML; si falla, no pasa nada:
+      // el endpoint GET /invoices/:id/xml lo vuelve a pedir a Facturama on-demand.
+      try {
+        const xmlBase64 = await getCFDIXml(result.Id)
+        await prisma.invoice.update({
+          where: { id },
+          data: { xmlContent: Buffer.from(xmlBase64, "base64").toString("utf-8") },
         })
-        .catch(console.error)
+      } catch (err) {
+        request.log.warn(err, "No se pudo cachear el XML al timbrar; se servirá on-demand")
+      }
 
       return reply.send(updated)
     },
   )
 
-  // Descargar PDF
+  // Descargar PDF (siempre desde Facturama)
   app.get(
     "/invoices/:id/pdf",
     { preHandler: requireAuth },
@@ -190,13 +242,45 @@ export async function invoicesRoutes(app: FastifyInstance) {
     },
   )
 
+  // Descargar XML — usa la copia en BD; si falta, la pide a Facturama y la cachea.
+  app.get(
+    "/invoices/:id/xml",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const invoice = await prisma.invoice.findUnique({ where: { id } })
+      if (!invoice?.facturamaid) {
+        return reply.status(404).send({ error: "XML no disponible" })
+      }
+      let xml = invoice.xmlContent
+      if (!xml) {
+        try {
+          const xmlBase64 = await getCFDIXml(invoice.facturamaid)
+          xml = Buffer.from(xmlBase64, "base64").toString("utf-8")
+          await prisma.invoice.update({ where: { id }, data: { xmlContent: xml } })
+        } catch (err) {
+          request.log.error(err, "Error obteniendo XML de Facturama")
+          return reply.status(502).send({ error: "No se pudo obtener el XML" })
+        }
+      }
+      reply.header("Content-Type", "application/xml")
+      reply.header("Content-Disposition", `attachment; filename="factura-${invoice.folio}.xml"`)
+      return reply.send(xml)
+    },
+  )
+
   // Cancelar factura
   app.post(
     "/invoices/:id/cancel",
     { preHandler: requireRole("admin") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
-      const { motive = "02" } = (request.body as { motive?: string }) ?? {}
+      // Motivos SAT soportados sin folio de sustitución (el 01 requiere UUID
+      // del comprobante que sustituye, fuera de alcance por ahora).
+      const motive = (request.body as { motive?: string })?.motive ?? "02"
+      if (!["02", "03", "04"].includes(motive)) {
+        return reply.status(400).send({ error: "Motivo de cancelación inválido (02, 03 o 04)" })
+      }
 
       const invoice = await prisma.invoice.findUnique({ where: { id } })
       if (!invoice) return reply.status(404).send({ error: "Factura no encontrada" })
@@ -207,7 +291,13 @@ export async function invoicesRoutes(app: FastifyInstance) {
         return reply.status(409).send({ error: "Factura sin ID de Facturama" })
       }
 
-      await cancelCFDI(invoice.facturamaid, motive)
+      try {
+        await cancelCFDI(invoice.facturamaid, motive)
+      } catch (err) {
+        request.log.error(err, "Error cancelando con Facturama")
+        const message = err instanceof Error ? err.message : "Error al cancelar"
+        return reply.status(502).send({ error: message })
+      }
 
       const updated = await prisma.invoice.update({
         where: { id },

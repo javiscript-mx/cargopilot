@@ -74,14 +74,16 @@ model Verification {
 // ─── Core del negocio ────────────────────────────────────────────────────────
 
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  rfc       String   @unique
-  email     String?
-  phone     String?
-  address   Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  rfc           String   @unique
+  email         String?
+  phone         String?
+  address       Json?
+  fiscalRegime  String?  // RegimenFiscalReceptor (CFDI 4.0)
+  fiscalZipCode String?  // DomicilioFiscalReceptor — CP fiscal del receptor (CFDI 4.0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   shipments Shipment[]
   invoices  Invoice[]
@@ -90,23 +92,52 @@ model Customer {
 }
 
 model Shipment {
-  id          String         @id @default(cuid())
-  folio       String         @unique
-  status      ShipmentStatus @default(draft)
-  origin      String
-  destination String
-  cargo       Json
-  notes       String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id            String         @id @default(cuid())
+  folio         String         @unique
+  status        ShipmentStatus @default(draft)
+  operationType String         @default("IMPORT") // catálogo service_type
+  transportMode String?        // catálogo transport_mode — null para servicios sin traslado
+  cargoType     String?        // modalidad de carga — catálogo cargo_type (suelta, contenerizada...)
+  origin        String?
+  destination   String?
+  cargo         Json?          // resumen libre opcional; el detalle real va en merchandise[]
+  reference     String?        // referencia externa: booking, BL, contenedor, pedido del cliente
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   customerId  String
   customer    Customer  @relation(fields: [customerId], references: [id])
   assignedTo  String?
   assignee    User?     @relation(fields: [assignedTo], references: [id])
   invoices    Invoice[]
+  events      ShipmentEvent[]
+  merchandise Merchandise[]
+  containers  Container[]
+
+  // Autotransporte (Carta Porte): unidad y operador subcontratados
+  vehicleId   String?
+  vehicle     Vehicle?  @relation(fields: [vehicleId], references: [id])
+  operatorId  String?
+  operator    Operator? @relation(fields: [operatorId], references: [id])
 
   @@map("shipments")
+}
+
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  type       String   // status_change | milestone | note
+  title      String
+  detail     String?
+  occurredAt DateTime @default(now()) // cuándo sucedió realmente (permite registro retroactivo)
+  createdBy  String?  // userId
+  createdAt  DateTime @default(now())
+
+  @@index([shipmentId, occurredAt])
+  @@map("shipment_events")
 }
 
 model Invoice {
@@ -118,6 +149,9 @@ model Invoice {
   tax          Decimal       @db.Decimal(12, 2)
   total        Decimal       @db.Decimal(12, 2)
   cfdiUse      String        @default("G03")
+  paymentForm  String        @default("03")  // forma de pago SAT
+  paymentMethod String       @default("PUE") // método de pago SAT
+  items        Json?         // conceptos: [{ description, quantity, unitPrice, productCode, unitCode }]
   xmlContent   String?
   pdfUrl       String?
   facturamaid  String?       // ID del comprobante en Facturama
@@ -132,6 +166,161 @@ model Invoice {
 
   @@unique([series, folio])
   @@map("invoices")
+}
+
+model Supplier {
+  id        String       @id @default(cuid())
+  name      String
+  type      String       // references CatalogItem(category=supplier_type).code
+  rfc       String?
+  email     String?
+  phone     String?
+  contact   String?
+  address   Json?
+  notes     String?
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  vehicles  Vehicle[]
+  operators Operator[]
+
+  @@map("suppliers")
+}
+
+// Contenedor de un expediente (modalidad contenerizada) — nodo Contenedor de Carta Porte
+model Container {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  number      String   // matrícula del contenedor (p. ej. MSKU1234567)
+  type        String?  // catálogo container_type (20DV, 40HC, 40RF...)
+  seal        String?  // sello / precinto
+  tare        Decimal? @db.Decimal(10, 3) // tara en kg
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchandise Merchandise[]
+
+  @@index([shipmentId])
+  @@map("containers")
+}
+
+// Mercancía / partida de carga de un expediente (alimenta el nodo Mercancias de Carta Porte)
+model Merchandise {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  description String   // Descripcion (BienesTransp)
+  quantity    Decimal  @db.Decimal(12, 3) // Cantidad
+  unitKey     String?  // ClaveUnidad — catálogo sat_unit_key
+  weight      Decimal? @db.Decimal(12, 3) // PesoEnKg
+  value       Decimal? @db.Decimal(14, 2) // ValorMercancia
+  productKey  String?  // ClaveProdServCP — catálogo sat_product_key
+  hsCode      String?  // FraccionArancelaria (comercio exterior)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Asignación opcional a un contenedor (modalidad contenerizada)
+  containerId String?
+  container   Container? @relation(fields: [containerId], references: [id], onDelete: SetNull)
+
+  @@index([shipmentId])
+  @@index([containerId])
+  @@map("merchandise")
+}
+
+// Unidad de transporte subcontratada a un proveedor (bloque Autotransporte de Carta Porte)
+model Vehicle {
+  id              String   @id @default(cuid())
+  supplierId      String
+  supplier        Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  economicNumber  String?  // número económico / alias para identificarla
+  plates          String   // PlacaVM
+  year            Int?     // AnioModeloVM
+  configVehicular String?  // catálogo cp_config_vehicular (ConfigAutotransporte)
+  grossWeight     Decimal? @db.Decimal(10, 3) // PesoBrutoVehicular (toneladas)
+  permSct         String?  // catálogo cp_perm_sct (TipoPermiso)
+  permSctNumber   String?  // NumPermisoSCT
+  insurer         String?  // AseguraRespCivil
+  insurancePolicy String?  // PolizaRespCivil
+  status          String   @default("pending") // pending | authorized | suspended
+  active          Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shipments       Shipment[]
+
+  @@index([supplierId, active])
+  @@map("vehicles")
+}
+
+// Operador / figura de transporte de un proveedor (bloque FiguraTransporte de Carta Porte)
+model Operator {
+  id            String   @id @default(cuid())
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  name          String
+  rfc           String?
+  licenseNumber String?  // NumLicencia
+  address       Json?
+  status        String   @default("pending") // pending | authorized | suspended
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shipments     Shipment[]
+
+  @@index([supplierId, active])
+  @@map("operators")
+}
+
+model CatalogItem {
+  id        String   @id @default(cuid())
+  category  String   // supplier_type | service_type | transport_mode | cargo_type | incoterm | port | sat_product_key | sat_unit_key | sat_cfdi_use | sat_payment_form | sat_payment_method
+  code      String
+  name      String
+  extra     Json?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Unicidad real (category, code) SOLO entre activos: índice parcial
+  // creado a mano en la migración (Prisma no soporta índices parciales).
+  // Esto permite conservar histórico inactivo con el mismo código.
+  @@index([category, active])
+  @@map("catalog_items")
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  entityType   String   // customer | supplier | shipment | invoice
+  entityId     String
+  originalName String
+  mimeType     String
+  size         Int
+  gcsPath      String   // ruta del objeto dentro del bucket
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("settings")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -155,3 +344,4 @@ enum InvoiceStatus {
   stamped
   cancelled
 }
+

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { AddressInput, type AddressValue } from "@/components/ui/address-input"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
-import { personaType, PERSONA_LABEL } from "@/lib/fiscal"
+import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
 import { validateCp, validateEmail, validatePhone, validateRequired, validateRfc, collectErrors } from "@/lib/validators"
 import type { Customer, CustomerPayload } from "@/api/customers"
 
@@ -225,10 +225,8 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
   const persona = personaType(form.rfc, selectedRegimeExtra)
   const isPhysicalPerson = persona ? persona === "fisica" : form.rfc.length === 13
   const cfdiUseOptions = cfdiUseItems
-    .filter((item) => {
-      const extra = item.extra as { moral?: boolean; physical?: boolean } | null
-      return isPhysicalPerson ? extra?.physical !== false : extra?.moral !== false
-    })
+    .filter((item) => FORWARDING_CFDI_USES.includes(item.code))
+    .filter((item) => cfdiUseAppliesToPersona(item.extra as { moral?: boolean; physical?: boolean } | null, persona))
     .map((item) => ({ value: item.code, label: `${item.code} – ${item.name}` }))
 
   // Método de pago default manda sobre la forma: PPD ⇒ forma "99 - Por definir"; PUE ⇒ forma real (sin 99)

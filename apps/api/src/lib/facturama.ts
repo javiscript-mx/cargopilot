@@ -63,6 +63,8 @@ export interface FacturамаCFDIPayload {
     CfdiUse: string        // "G03" = Gastos en general
     FiscalRegime: string   // "616" = Sin obligaciones fiscales
     TaxZipCode: string
+    TaxResidence?: string  // c_Pais (solo receptor extranjero, ej. "USA")
+    NumRegIdTrib?: string  // Tax ID extranjero (solo receptor extranjero)
   }
   Items: FacturamaItem[]
 }

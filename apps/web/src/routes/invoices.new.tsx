@@ -12,20 +12,12 @@ import { customersApi } from "@/api/customers"
 import { shipmentsApi } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
 import { Badge } from "@/components/ui/badge"
-import { SatPicker } from "@/components/ui/sat-picker"
-import { satApi } from "@/api/sat"
-import { personaType, PERSONA_LABEL } from "@/lib/fiscal"
+import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
 import { validateRequired, validateQuantity, validateUnitPrice } from "@/lib/validators"
 
 export const Route = createFileRoute("/invoices/new")({
   component: NewInvoicePage,
 })
-
-// Búsqueda/resolución para los pickers SAT (catálogos grandes)
-const prodSearch = (q: string) => satApi.searchProdserv(q).then((r) => r.map((x) => ({ code: x.code, label: `${x.code} – ${x.description}` })))
-const prodResolve = (code: string) => satApi.getProdserv(code).then((r) => (r[0] ? { code: r[0].code, label: `${r[0].code} – ${r[0].description}` } : null))
-const uniSearch = (q: string) => satApi.searchUnidades(q).then((r) => r.map((x) => ({ code: x.code, label: `${x.code} – ${x.name}` })))
-const uniResolve = (code: string) => satApi.getUnidad(code).then((r) => (r[0] ? { code: r[0].code, label: `${r[0].code} – ${r[0].name}` } : null))
 
 interface LineItem { description: string; quantity: string; unitPrice: string; productCode: string; unitCode: string }
 const emptyItem = (): LineItem => ({ description: "", quantity: "1", unitPrice: "", productCode: "78101800", unitCode: "E48" })
@@ -39,6 +31,9 @@ function NewInvoicePage() {
   const { items: regimeItems } = useCatalog("sat_tax_regime")
   const { options: paymentFormOptions } = useCatalog("sat_payment_form")
   const { options: paymentMethodOptions } = useCatalog("sat_payment_method")
+  // Claves SAT curadas para forwarding (admin las edita en Catálogos)
+  const { options: productOptions } = useCatalog("sat_product_key")
+  const { options: unitOptions } = useCatalog("sat_unit_key")
 
   const [customerId, setCustomerId] = useState("")
   const [shipmentId, setShipmentId] = useState("")
@@ -54,12 +49,10 @@ function NewInvoicePage() {
     ? (regimeItems.find((r) => r.code === selectedCustomer.fiscalRegime)?.extra as { moral?: boolean; physical?: boolean } | null | undefined)
     : null
   const persona = selectedCustomer ? personaType(selectedCustomer.rfc, regimeExtra) : null
+  // Lista curada de forwarding + aplicabilidad por persona del receptor
   const cfdiUseOptions = cfdiUseItems
-    .filter((i) => {
-      if (!persona) return true
-      const e = i.extra as { moral?: boolean; physical?: boolean } | null
-      return persona === "fisica" ? e?.physical !== false : e?.moral !== false
-    })
+    .filter((i) => FORWARDING_CFDI_USES.includes(i.code))
+    .filter((i) => cfdiUseAppliesToPersona(i.extra as { moral?: boolean; physical?: boolean } | null, persona))
     .map((i) => ({ value: i.code, label: `${i.code} – ${i.name}` }))
 
   // Método de pago manda sobre forma: PPD ⇒ forma "99 - Por definir"; PUE ⇒ forma real (sin 99)
@@ -233,15 +226,15 @@ function NewInvoicePage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_220px]">
-                  <SatPicker
-                    label="Clave producto/servicio SAT" cacheKey="prodserv"
-                    value={item.productCode} onChange={(c) => updateItem(idx, "productCode", c)}
-                    search={prodSearch} resolve={prodResolve}
+                  <Select
+                    label="Clave producto/servicio SAT" placeholder="Selecciona..."
+                    options={productOptions}
+                    value={item.productCode} onChange={(e) => updateItem(idx, "productCode", e.target.value)}
                   />
-                  <SatPicker
-                    label="Clave unidad SAT" cacheKey="unidades" minChars={1}
-                    value={item.unitCode} onChange={(c) => updateItem(idx, "unitCode", c)}
-                    search={uniSearch} resolve={uniResolve}
+                  <Select
+                    label="Clave unidad SAT" placeholder="Selecciona..."
+                    options={unitOptions}
+                    value={item.unitCode} onChange={(e) => updateItem(idx, "unitCode", e.target.value)}
                   />
                 </div>
               </div>

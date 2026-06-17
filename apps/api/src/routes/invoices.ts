@@ -26,6 +26,9 @@ const CreateInvoiceSchema = z.object({
   series: z.string().default("A"),
 })
 
+// Redondeo a 2 decimales (CFDI exige importes con 2 decimales que cuadren)
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
 // Lee un setting string con fallback
 async function getSetting(key: string, fallback: string): Promise<string> {
   const row = await prisma.setting.findUnique({ where: { key } })
@@ -74,12 +77,12 @@ export async function invoicesRoutes(app: FastifyInstance) {
       const customer = await prisma.customer.findUnique({ where: { id: body.data.customerId } })
       if (!customer) return reply.status(404).send({ error: "Cliente no encontrado" })
 
-      const subtotal = body.data.items.reduce(
-        (acc, item) => acc + item.quantity * item.unitPrice,
+      const subtotal = round2(body.data.items.reduce(
+        (acc, item) => acc + round2(item.quantity * item.unitPrice),
         0,
-      )
-      const tax = subtotal * 0.16
-      const total = subtotal + tax
+      ))
+      const tax = round2(subtotal * 0.16)
+      const total = round2(subtotal + tax)
 
       // Folio por serie basado en el máximo (no count): sin colisión tras borrados.
       const series = body.data.series
@@ -150,6 +153,14 @@ export async function invoicesRoutes(app: FastifyInstance) {
         })
       }
 
+      // Nombre real de la unidad por su clave (ej. E48 → "Unidad de servicio")
+      const unitCodes = [...new Set(items.map((i) => i.unitCode))]
+      const unitRows = await prisma.satUnitKey.findMany({ where: { code: { in: unitCodes } }, select: { code: true, name: true } })
+      const unitName = (code: string) => unitRows.find((u) => u.code === code)?.name ?? "Servicio"
+
+      // Receptor extranjero: agrega país (c_Pais) y tax id si el cliente no es MX
+      const isForeign = (customer.taxCountry ?? "MX") !== "MX"
+
       const payload = {
         Serie: invoice.series,
         Currency: "MXN",
@@ -163,17 +174,19 @@ export async function invoicesRoutes(app: FastifyInstance) {
           CfdiUse: invoice.cfdiUse,
           FiscalRegime: customer.fiscalRegime,
           TaxZipCode: customer.fiscalZipCode,
+          ...(isForeign && customer.taxCountry ? { TaxResidence: customer.taxCountry } : {}),
+          ...(isForeign && customer.foreignTaxId ? { NumRegIdTrib: customer.foreignTaxId } : {}),
         },
         Items: items.map((item) => {
-          const subtotal = item.quantity * item.unitPrice
-          const tax = subtotal * 0.16
+          const subtotal = round2(item.quantity * item.unitPrice)
+          const tax = round2(subtotal * 0.16)
           return {
             Quantity: item.quantity,
             ProductCode: item.productCode,
             UnitCode: item.unitCode,
-            Unit: "Servicio",
+            Unit: unitName(item.unitCode),
             Description: item.description,
-            UnitPrice: item.unitPrice,
+            UnitPrice: round2(item.unitPrice),
             Subtotal: subtotal,
             TaxObject: "02",
             Taxes: [
@@ -185,7 +198,7 @@ export async function invoicesRoutes(app: FastifyInstance) {
                 IsRetention: false,
               },
             ],
-            Total: subtotal + tax,
+            Total: round2(subtotal + tax),
           }
         }),
       }

@@ -24,3 +24,17 @@ export const PERSONA_LABEL: Record<PersonaType, string> = {
   fisica: "Persona física",
   moral: "Persona moral",
 }
+
+// Usos CFDI relevantes para facturación de servicios de forwarding (CFDI 4.0).
+// Lista curada para minimizar error — el SAT permite más, pero estos son los del negocio.
+// (P01 "Por definir" quedó fuera: no es válido en 4.0.)
+export const FORWARDING_CFDI_USES = ["G03", "G01", "G02", "S01"]
+
+/** ¿El uso CFDI aplica al tipo de persona? (item.extra con banderas moral/physical) */
+export function cfdiUseAppliesToPersona(
+  extra: { moral?: boolean; physical?: boolean } | null | undefined,
+  persona: PersonaType | null,
+): boolean {
+  if (!persona) return true
+  return persona === "fisica" ? extra?.physical !== false : extra?.moral !== false
+}

@@ -13,7 +13,7 @@ import { shipmentsApi } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
 import { Badge } from "@/components/ui/badge"
 import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
-import { validateRequired, validateQuantity, validateUnitPrice } from "@/lib/validators"
+import { validateRequired, validateQuantity, validateUnitPrice, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/invoices/new")({
@@ -115,6 +115,7 @@ function NewInvoicePage() {
     if (Object.keys(errs).length) {
       setErrors(errs)
       toast.error("Revisa los campos marcados", errs["general"] ?? "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
       return
     }
     setErrors({})

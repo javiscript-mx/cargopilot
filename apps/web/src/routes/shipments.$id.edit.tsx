@@ -12,7 +12,7 @@ import { AutotransporteSelector } from "@/components/shipments/autotransporte-se
 import { shipmentsApi } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
-import { collectErrors } from "@/lib/validators"
+import { collectErrors, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/shipments/$id/edit")({
@@ -94,6 +94,7 @@ function EditShipmentPage() {
     if (Object.keys(errs).length) {
       setErrors(errs)
       toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
       return
     }
     setErrors({})

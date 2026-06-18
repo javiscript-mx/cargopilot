@@ -10,7 +10,7 @@ import { AddressInput, type AddressValue } from "@/components/ui/address-input"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
 import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
-import { validateCp, validateEmail, validatePhone, validateRequired, validateRfc, collectErrors } from "@/lib/validators"
+import { validateCp, validateEmail, validatePhone, validateRequired, validateRfc, collectErrors, scrollToFirstError } from "@/lib/validators"
 import type { Customer, CustomerPayload } from "@/api/customers"
 
 const STATUS_OPTIONS = [
@@ -286,11 +286,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
       toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
-      // Lleva al primer campo con error
-      setTimeout(() => {
-        const first = document.querySelector(".text-\\[--color-destructive\\]")
-        first?.scrollIntoView({ behavior: "smooth", block: "center" })
-      }, 50)
+      scrollToFirstError()
       return
     }
     setErrors({})

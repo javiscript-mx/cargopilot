@@ -13,7 +13,7 @@ import { documentsApi } from "@/api/documents"
 import { PendingFilesPicker } from "@/components/ui/documents-section"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
-import { validateRfc, validateEmail, validatePhone, validateRequired, collectErrors } from "@/lib/validators"
+import { validateRfc, validateEmail, validatePhone, validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY_FORM = {
   name: "", type: "carrier" as Supplier["type"],
@@ -101,6 +101,7 @@ export function SupplierForm({ mode, supplier }: Props) {
     if (Object.keys(errs).length) {
       setErrors(errs)
       toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
       return
     }
     setErrors({})

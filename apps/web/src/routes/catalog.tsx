@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { catalogApi, CATALOG_CATEGORY_LABELS, CATALOG_GROUPS, type CatalogCategory, type CatalogItem } from "@/api/catalog"
 import { authClient } from "@/lib/auth-client"
-import { validateCatalogCode, validateRequired, collectErrors } from "@/lib/validators"
+import { validateCatalogCode, validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/toast"
 
@@ -139,6 +139,7 @@ function CatalogPage() {
     if (Object.keys(errs).length) {
       setErrors(errs)
       toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
       return
     }
     const extra = activeCategory === "supplier_type" && form.autotransporte ? { autotransporte: true } : null

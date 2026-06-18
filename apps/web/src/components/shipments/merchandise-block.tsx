@@ -4,11 +4,26 @@ import { Plus, Pencil, Trash2, Package } from "lucide-react"
 import { Drawer } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { SatPicker, type PickerItem } from "@/components/ui/sat-picker"
 import { Button } from "@/components/ui/button"
 import { merchandiseApi, type Merchandise } from "@/api/merchandise"
 import { containersApi } from "@/api/containers"
-import { useCatalog } from "@/hooks/use-catalog"
+import { satApi } from "@/api/sat"
 import { useToast } from "@/components/ui/toast"
+
+// Mapeo catálogos SAT grandes → opciones del picker (búsqueda server-side completa).
+const searchProductKeys = async (q: string): Promise<PickerItem[]> =>
+  (await satApi.searchProdserv(q)).map((p) => ({ code: p.code, label: `${p.code} · ${p.description}` }))
+const resolveProductKey = async (code: string): Promise<PickerItem | null> => {
+  const [p] = await satApi.getProdserv(code)
+  return p ? { code: p.code, label: `${p.code} · ${p.description}` } : null
+}
+const searchUnitKeys = async (q: string): Promise<PickerItem[]> =>
+  (await satApi.searchUnidades(q)).map((u) => ({ code: u.code, label: `${u.code} · ${u.name}` }))
+const resolveUnitKey = async (code: string): Promise<PickerItem | null> => {
+  const [u] = await satApi.getUnidad(code)
+  return u ? { code: u.code, label: `${u.code} · ${u.name}` } : null
+}
 
 const EMPTY = {
   description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", notes: "",
@@ -28,10 +43,6 @@ export function MerchandiseBlock({
     queryFn: () => containersApi.list(shipmentId),
     enabled: contenerizada,
   })
-  const { simpleOptions: unitOptions } = useCatalog("sat_unit_key")
-  const { simpleOptions: productOptions } = useCatalog("sat_product_key")
-  const unitLabel = (code: string | null) => (code ? unitOptions.find((o) => o.value === code)?.label ?? code : null)
-  const containerNumber = (id: string | null) => (id ? containers.find((c) => c.id === id)?.number ?? "Contenedor" : null)
 
   const [show, setShow] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -104,7 +115,7 @@ export function MerchandiseBlock({
       <div className="min-w-0 flex-1">
         <p className="font-medium">{m.description}</p>
         <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[--color-muted-foreground]">
-          <span>{fmt(m.quantity)}{unitLabel(m.unitKey) ? ` ${unitLabel(m.unitKey)}` : ""}</span>
+          <span>{fmt(m.quantity)}{m.unitKey ? ` ${m.unitKey}` : ""}</span>
           {m.weight && <span>{fmt(m.weight)} kg</span>}
           {m.value && <span>${fmt(m.value)}</span>}
           {m.hsCode && <span>Fracción: {m.hsCode}</span>}
@@ -156,9 +167,19 @@ export function MerchandiseBlock({
             <Input id="description" label="Descripción" value={form.description} onChange={set("description")} placeholder="Mercancía general, autopartes..." />
             <div className="grid grid-cols-2 gap-3">
               <Input id="quantity" label="Cantidad" type="number" min="0" step="0.001" value={form.quantity} onChange={set("quantity")} />
-              <Select id="unitKey" label="Unidad (SAT)" placeholder="Selecciona..." options={unitOptions} value={form.unitKey} onChange={set("unitKey")} />
+              <SatPicker
+                label="Unidad (SAT)" cacheKey="unidades"
+                value={form.unitKey} onChange={(code) => setForm((f) => ({ ...f, unitKey: code }))}
+                search={searchUnitKeys} resolve={resolveUnitKey}
+                placeholder="Buscar unidad..."
+              />
             </div>
-            <Select id="productKey" label="Clave producto SAT" placeholder="Selecciona..." options={productOptions} value={form.productKey} onChange={set("productKey")} />
+            <SatPicker
+              label="Clave producto/servicio (SAT)" cacheKey="prodserv"
+              value={form.productKey} onChange={(code) => setForm((f) => ({ ...f, productKey: code }))}
+              search={searchProductKeys} resolve={resolveProductKey}
+              placeholder="Buscar clave de producto..."
+            />
             <div className="grid grid-cols-2 gap-3">
               <Input id="weight" label="Peso (kg)" type="number" min="0" step="0.001" value={form.weight} onChange={set("weight")} />
               <Input id="value" label="Valor (MXN)" type="number" min="0" step="0.01" value={form.value} onChange={set("value")} />

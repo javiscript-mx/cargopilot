@@ -1,0 +1,230 @@
+import { useState } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { Route, Truck, Plus, Trash2, CheckCircle2, Circle, Star } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/toast"
+import { processApi, type ProcessTask, type LegScope } from "@/api/process"
+
+export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; canEdit: boolean }) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+
+  const { data: process, isLoading } = useQuery({
+    queryKey: ["process", shipmentId],
+    queryFn: () => processApi.get(shipmentId),
+  })
+  const hasProcess = (process?.stages.length ?? 0) > 0
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["workflow-templates"],
+    queryFn: () => processApi.templates(),
+    enabled: canEdit && !hasProcess,
+  })
+  const [templateCode, setTemplateCode] = useState("")
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["process", shipmentId] })
+    queryClient.invalidateQueries({ queryKey: ["shipments", shipmentId] }) // bitácora
+  }
+
+  const applyMutation = useMutation({
+    mutationFn: (code: string) => processApi.applyWorkflow(shipmentId, code),
+    onSuccess: () => { invalidate(); toast.success("Proceso aplicado") },
+    onError: (err: Error) => toast.error("No se pudo aplicar el proceso", err.message),
+  })
+
+  const addLegMutation = useMutation({
+    mutationFn: (scope: LegScope) => processApi.addLeg(shipmentId, scope),
+    onSuccess: (_, scope) => { invalidate(); toast.success(`Tramo ${scope === "local" ? "local" : "foráneo"} agregado`) },
+    onError: (err: Error) => toast.error("No se pudo agregar el tramo", err.message),
+  })
+
+  const deleteLegMutation = useMutation({
+    mutationFn: (legId: string) => processApi.deleteLeg(legId),
+    onSuccess: () => { invalidate(); toast.success("Tramo eliminado") },
+    onError: (err: Error) => toast.error("No se pudo eliminar el tramo", err.message),
+  })
+
+  const taskMutation = useMutation({
+    mutationFn: ({ task, isLeg, done }: { task: ProcessTask; isLeg: boolean; done: boolean }) => {
+      const data = { status: done ? ("done" as const) : ("pending" as const) }
+      return isLeg ? processApi.updateLegTask(task.id, data) : processApi.updateTask(task.id, data)
+    },
+    onSuccess: () => invalidate(),
+    onError: (err: Error) => toast.error("No se pudo actualizar la tarea", err.message),
+  })
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-sm text-[--color-muted-foreground]">Cargando proceso...</CardContent>
+      </Card>
+    )
+  }
+
+  // ── Sin proceso aplicado ──
+  if (!hasProcess) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Route className="h-4 w-4 text-[--color-muted-foreground]" /> Proceso
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!canEdit ? (
+            <p className="text-sm text-[--color-muted-foreground]">Este expediente no tiene un proceso aplicado.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-[--color-muted-foreground]">
+                Aplica un proceso para desglosar el expediente en fases y tramos.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Select
+                    id="templateCode" label="Plantilla de proceso"
+                    placeholder="Selecciona..."
+                    options={templates.map((t) => ({ value: t.code, label: t.name }))}
+                    value={templateCode}
+                    onChange={(e) => setTemplateCode(e.target.value)}
+                  />
+                </div>
+                <Button
+                  className="w-full sm:w-auto"
+                  loading={applyMutation.isPending}
+                  disabled={!templateCode}
+                  onClick={() => templateCode && applyMutation.mutate(templateCode)}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const toggleTask = (task: ProcessTask, isLeg: boolean) =>
+    taskMutation.mutate({ task, isLeg, done: task.status !== "done" })
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Route className="h-4 w-4 text-[--color-muted-foreground]" /> Proceso
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        {/* Fases */}
+        {process!.stages.map((stage) => {
+          const done = stage.tasks.filter((t) => t.status === "done").length
+          return (
+            <div key={stage.id}>
+              <div className="mb-1.5 flex items-center justify-between">
+                <h4 className="text-sm font-semibold">{stage.name}</h4>
+                <span className="text-xs text-[--color-muted-foreground]">{done}/{stage.tasks.length}</span>
+              </div>
+              <div className="flex flex-col divide-y divide-[--color-border] rounded-md border border-[--color-border]">
+                {stage.tasks.map((task) => (
+                  <TaskRow key={task.id} task={task} canEdit={canEdit} onToggle={() => toggleTask(task, false)} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Tramos */}
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Truck className="h-4 w-4 text-[--color-muted-foreground]" /> Tramos
+              <span className="font-normal text-[--color-muted-foreground]">({process!.legs.length})</span>
+            </h4>
+            {canEdit && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending} onClick={() => addLegMutation.mutate("local")}>
+                  <Plus className="h-3.5 w-3.5" /> Local
+                </Button>
+                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending} onClick={() => addLegMutation.mutate("foraneo")}>
+                  <Plus className="h-3.5 w-3.5" /> Foráneo
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {process!.legs.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[--color-border] py-4 text-center text-sm text-[--color-muted-foreground]">
+              Sin tramos. Agrega el primero (local o foráneo).
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {process!.legs.map((leg) => {
+                const done = leg.tasks.filter((t) => t.status === "done").length
+                return (
+                  <div key={leg.id} className="rounded-md border border-[--color-border]">
+                    <div className="flex items-center justify-between gap-2 border-b border-[--color-border] bg-[--color-muted]/40 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">Tramo {leg.order}</span>
+                        <Badge variant={leg.scope === "foraneo" ? "default" : "outline"}>
+                          {leg.scope === "foraneo" ? "Foráneo · Carta Porte" : "Local"}
+                        </Badge>
+                        <span className="text-xs text-[--color-muted-foreground]">{done}/{leg.tasks.length}</span>
+                      </div>
+                      {canEdit && (
+                        <button
+                          title="Eliminar tramo"
+                          onClick={() => { if (confirm(`¿Eliminar el tramo ${leg.order}?`)) deleteLegMutation.mutate(leg.id) }}
+                          className="rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col divide-y divide-[--color-border]">
+                      {leg.tasks.map((task) => (
+                        <TaskRow key={task.id} task={task} canEdit={canEdit} onToggle={() => toggleTask(task, true)} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TaskRow({ task, canEdit, onToggle }: { task: ProcessTask; canEdit: boolean; onToggle: () => void }) {
+  const done = task.status === "done"
+  return (
+    <div className="flex items-start gap-2.5 px-3 py-2">
+      <button
+        onClick={onToggle}
+        disabled={!canEdit}
+        title={done ? "Marcar pendiente" : "Marcar completada"}
+        className="mt-0.5 shrink-0 disabled:cursor-default"
+      >
+        {done
+          ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+          : <Circle className="h-4 w-4 text-[--color-muted-foreground]" />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className={done ? "text-sm text-[--color-muted-foreground] line-through" : "text-sm"}>{task.name}</span>
+          {task.isMilestone && <Star className="h-3 w-3 shrink-0 text-amber-500" aria-label="Hito" />}
+        </div>
+        {done && task.actualAt && (
+          <p className="mt-0.5 text-xs text-[--color-muted-foreground]">
+            {new Date(task.actualAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}

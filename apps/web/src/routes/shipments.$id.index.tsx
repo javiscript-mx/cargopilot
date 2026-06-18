@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { DocumentsSection } from "@/components/ui/documents-section"
 import { CargoSection } from "@/components/shipments/cargo-section"
+import { ProcessSection } from "@/components/shipments/process-section"
 import { shipmentsApi, STATUS_CONFIG, type ShipmentStatus, type ShipmentEvent } from "@/api/shipments"
 import { merchandiseApi } from "@/api/merchandise"
 import { useCatalog } from "@/hooks/use-catalog"
@@ -217,8 +218,10 @@ function ShipmentDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* ── Columna principal: bitácora ── */}
+        {/* ── Columna principal: proceso + bitácora ── */}
         <div className="flex flex-col gap-4 lg:col-span-2">
+          <ProcessSection shipmentId={id} canEdit={canEdit} />
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-base">Bitácora</CardTitle>

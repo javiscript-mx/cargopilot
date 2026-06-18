@@ -51,7 +51,8 @@ export interface FacturamaItem {
 }
 
 export interface FacturамаCFDIPayload {
-  Serie: string
+  Serie?: string  // debe estar registrada en la sucursal de Facturama; si se omite, Facturama asigna
+  Date?: string   // fecha de emisión "yyyy-MM-ddTHH:mm:ss"; si se omite, Facturama usa la hora del servidor
   Currency: string
   ExpeditionPlace: string  // CP del emisor
   PaymentForm: string      // "03" = Transferencia

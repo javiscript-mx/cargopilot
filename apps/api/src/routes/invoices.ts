@@ -161,8 +161,12 @@ export async function invoicesRoutes(app: FastifyInstance) {
       // Receptor extranjero: agrega país (c_Pais) y tax id si el cliente no es MX
       const isForeign = (customer.taxCountry ?? "MX") !== "MX"
 
+      // Serie para Facturama: debe estar registrada en su sucursal. Si no se configura
+      // en Settings, se omite y Facturama asigna folio (evita "Serie debe existir en la sucursal").
+      const facturamaSerie = await getSetting("invoicing.facturamaSerie", "")
+
       const payload = {
-        Serie: invoice.series,
+        ...(facturamaSerie ? { Serie: facturamaSerie } : {}),
         Currency: "MXN",
         ExpeditionPlace: expeditionPlace,
         PaymentForm: invoice.paymentForm,

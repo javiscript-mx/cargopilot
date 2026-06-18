@@ -84,11 +84,12 @@ export async function cancelCFDI(cfdiId: string, motive: string = "02") {
 }
 
 export async function getCFDIPdf(cfdiId: string): Promise<string> {
-  const response = await facturamaFetch(`/api/cfdis/pdf/issued/${cfdiId}`)
+  // OJO: el recurso de descarga es "Cfdi" (singular); "cfdis" (plural) da 404.
+  const response = await facturamaFetch(`/api/Cfdi/pdf/issued/${cfdiId}`)
   return response.Content // base64
 }
 
 export async function getCFDIXml(cfdiId: string): Promise<string> {
-  const response = await facturamaFetch(`/api/cfdis/xml/issued/${cfdiId}`)
+  const response = await facturamaFetch(`/api/Cfdi/xml/issued/${cfdiId}`)
   return response.Content // base64
 }

@@ -71,6 +71,29 @@ interface TaskPatch {
   notes?: string | null
 }
 
+// Ubicación de un tramo (origen/destino) — base del nodo Ubicacion de Carta Porte
+export interface LegLocation {
+  name?: string
+  rfc?: string
+  zip?: string
+  address?: string
+}
+
+export interface LegPatch {
+  status?: ProcessLeg["status"]
+  origin?: LegLocation | null
+  destination?: LegLocation | null
+  distanceKm?: number | null
+  carrierSupplierId?: string | null
+  vehicleId?: string | null
+  operatorId?: string | null
+  plannedPickupAt?: string | null
+  actualPickupAt?: string | null
+  plannedDeliveryAt?: string | null
+  actualDeliveryAt?: string | null
+  notes?: string | null
+}
+
 export const processApi = {
   get: (shipmentId: string) => apiClient.get<ShipmentProcess>(`/shipments/${shipmentId}/process`),
   templates: () => apiClient.get<WorkflowTemplateOption[]>("/workflow-templates"),
@@ -78,8 +101,7 @@ export const processApi = {
     apiClient.post<{ stages: ProcessStage[] }>(`/shipments/${shipmentId}/workflow`, { templateCode }),
   addLeg: (shipmentId: string, scope: LegScope) =>
     apiClient.post<ProcessLeg>(`/shipments/${shipmentId}/legs`, { scope }),
-  updateLeg: (legId: string, data: Partial<Pick<ProcessLeg, "status" | "notes">>) =>
-    apiClient.patch<ProcessLeg>(`/legs/${legId}`, data),
+  updateLeg: (legId: string, data: LegPatch) => apiClient.patch<ProcessLeg>(`/legs/${legId}`, data),
   deleteLeg: (legId: string) => apiClient.delete<void>(`/legs/${legId}`),
   updateTask: (taskId: string, data: TaskPatch) => apiClient.patch<ProcessTask>(`/shipment-tasks/${taskId}`, data),
   updateLegTask: (taskId: string, data: TaskPatch) => apiClient.patch<ProcessTask>(`/leg-tasks/${taskId}`, data),

@@ -171,11 +171,11 @@ function ShipmentDetailPage() {
   // ── Información pendiente (consciente del tipo de operación) ──
   // Solo aplica mientras el expediente está activo; lo que falta depende de si
   // mueve carga (modo de transporte) o es un servicio puntual.
+  // La ruta y el transporte viven en los tramos (sección Proceso); aquí solo
+  // guiamos sobre datos del expediente: mercancías y referencia documental.
   const isActive = !["delivered", "cancelled"].includes(shipment.status)
-  const movesCargo = Boolean(shipment.transportMode)
   const pending: string[] = []
-  if (movesCargo && (!shipment.origin || !shipment.destination)) pending.push("Ruta (origen y destino)")
-  if (movesCargo && merchandise.length === 0) pending.push("Mercancías de la carga")
+  if (merchandise.length === 0) pending.push("Mercancías de la carga")
   if (!shipment.reference) pending.push("Referencia documental (booking, BL, contenedor)")
 
   return (
@@ -410,23 +410,6 @@ function ShipmentDetailPage() {
               <Row label="Creado" value={new Date(shipment.createdAt).toLocaleDateString("es-MX")} />
             </CardContent>
           </Card>
-
-          {(shipment.vehicle || shipment.operator) && (
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">Autotransporte</CardTitle></CardHeader>
-              <CardContent className="flex flex-col gap-2.5 text-sm">
-                {shipment.vehicle && (
-                  <>
-                    <Row label="Unidad" value={<span className="font-mono">{shipment.vehicle.plates}{shipment.vehicle.economicNumber ? ` · ${shipment.vehicle.economicNumber}` : ""}</span>} />
-                    <Row label="Transportista" value={shipment.vehicle.supplier.name} />
-                  </>
-                )}
-                {shipment.operator && (
-                  <Row label="Operador" value={shipment.operator.name} />
-                )}
-              </CardContent>
-            </Card>
-          )}
 
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Cliente</CardTitle></CardHeader>

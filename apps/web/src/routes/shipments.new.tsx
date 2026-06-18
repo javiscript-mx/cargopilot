@@ -8,8 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AddressInput } from "@/components/ui/address-input"
-import { AutotransporteSelector } from "@/components/shipments/autotransporte-selector"
 import { shipmentsApi } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
@@ -25,20 +23,20 @@ function NewShipmentPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
-  const { simpleOptions: operationOptions, isLoading: opsLoading } = useCatalog("service_type")
-  const { simpleOptions: transportOptions } = useCatalog("transport_mode")
+  const { items: operationItems, simpleOptions: operationOptions, isLoading: opsLoading } = useCatalog("service_type")
 
   const [form, setForm] = useState({
-    customerId: "", operationType: "", transportMode: "",
-    origin: "", destination: "", reference: "",
-    description: "", notes: "",
+    customerId: "", operationType: "",
+    reference: "", description: "", notes: "",
   })
-  const [vehicleId, setVehicleId] = useState<string | null>(null)
-  const [operatorId, setOperatorId] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Con modo de transporte hay traslado físico: la ruta es obligatoria
-  const hasRoute = Boolean(form.transportMode)
+  // El modo de transporte se deriva del tipo de operación (extra.defaultTransport).
+  // La ruta, unidad y operador se capturan por tramo en la sección Proceso.
+  const transportFor = (operationType: string): string | null => {
+    const item = operationItems.find((i) => i.code === operationType)
+    return (item?.extra as { defaultTransport?: string } | null)?.defaultTransport ?? null
+  }
 
   const mutation = useMutation({
     mutationFn: shipmentsApi.create,
@@ -52,16 +50,10 @@ function NewShipmentPage() {
 
   function validate() {
     // Captura progresiva: lo único obligatorio es cliente + tipo de operación.
-    // La ruta y la carga se pueden completar después desde el expediente.
-    const e = collectErrors({
+    return collectErrors({
       customerId: form.customerId ? undefined : "Selecciona un cliente",
       operationType: form.operationType ? undefined : "Selecciona el tipo de operación",
     })
-    if (form.origin.trim() && form.destination.trim() &&
-        form.origin.trim().toLowerCase() === form.destination.trim().toLowerCase()) {
-      e["destination"] = "Destino no puede ser igual al origen"
-    }
-    return e
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -77,14 +69,10 @@ function NewShipmentPage() {
     mutation.mutate({
       customerId: form.customerId,
       operationType: form.operationType,
-      transportMode: form.transportMode || null,
-      origin: form.origin || null,
-      destination: form.destination || null,
+      transportMode: transportFor(form.operationType),
       reference: form.reference || null,
       cargo: form.description ? { description: form.description } : null,
       notes: form.notes || null,
-      vehicleId,
-      operatorId,
     })
   }
 
@@ -102,7 +90,7 @@ function NewShipmentPage() {
         </Link>
         <h1 className="text-2xl font-bold">Nuevo expediente</h1>
         <p className="text-sm text-[--color-muted-foreground]">
-          Para abrir solo necesitas cliente y tipo de operación. El resto se completa conforme avance.
+          Para abrir solo necesitas cliente y tipo de operación. La ruta y el transporte se capturan por tramo en el proceso.
         </p>
       </div>
 
@@ -133,58 +121,24 @@ function NewShipmentPage() {
           </CardContent>
         </Card>
 
-        {/* ── Detalles: opcional, se completan después ── */}
+        {/* ── Servicio: opcional ── */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <CardTitle>Detalles de la operación</CardTitle>
+              <CardTitle>Servicio</CardTitle>
               <Badge variant="outline">Opcional</Badge>
             </div>
             <p className="text-sm text-[--color-muted-foreground]">
-              Déjalos vacíos si aún no los tienes — se capturan después desde el expediente.
+              Descripción general. Tramos, mercancías y transporte se capturan después en el expediente.
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Select
-              id="transportMode" label="Modo de transporte (si hay traslado)"
-              placeholder="Sin traslado"
-              options={transportOptions}
-              {...f("transportMode")}
-            />
-
-            {hasRoute && (
-              <div className="grid grid-cols-2 gap-4">
-                <AddressInput
-                  id="origin" label="Origen"
-                  placeholder="Busca origen..."
-                  value={form.origin}
-                  error={errors["origin"]}
-                  onChange={(val) => setForm((p) => ({ ...p, origin: val }))}
-                />
-                <AddressInput
-                  id="destination" label="Destino"
-                  placeholder="Busca destino..."
-                  value={form.destination}
-                  error={errors["destination"]}
-                  onChange={(val) => setForm((p) => ({ ...p, destination: val }))}
-                />
-              </div>
-            )}
-
             <Input
               id="description" label="Descripción del servicio (opcional)"
-              placeholder="Lavado de contenedor 40', maniobras, etc. El detalle de mercancías se captura en el expediente."
+              placeholder="Flete de contenedor 40', maniobras, etc."
               {...f("description")}
             />
             <Input id="notes" label="Notas" {...f("notes")} />
-
-            {hasRoute && (
-              <AutotransporteSelector
-                vehicleId={vehicleId}
-                operatorId={operatorId}
-                onChange={({ vehicleId: v, operatorId: o }) => { setVehicleId(v); setOperatorId(o) }}
-              />
-            )}
           </CardContent>
         </Card>
 

@@ -7,8 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { AddressInput } from "@/components/ui/address-input"
-import { AutotransporteSelector } from "@/components/shipments/autotransporte-selector"
 import { shipmentsApi } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
@@ -30,17 +28,13 @@ function EditShipmentPage() {
     queryFn: () => shipmentsApi.get(id),
   })
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
-  const { simpleOptions: operationOptions } = useCatalog("service_type")
-  const { simpleOptions: transportOptions } = useCatalog("transport_mode")
+  const { items: operationItems, simpleOptions: operationOptions } = useCatalog("service_type")
 
   type FormState = {
-    customerId: string; operationType: string; transportMode: string
-    origin: string; destination: string; reference: string
-    description: string; notes: string
+    customerId: string; operationType: string
+    reference: string; description: string; notes: string
   }
   const [form, setForm] = useState<FormState | null>(null)
-  const [vehicleId, setVehicleId] = useState<string | null>(null)
-  const [operatorId, setOperatorId] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const initialized = form !== null
@@ -48,18 +42,17 @@ function EditShipmentPage() {
     setForm({
       customerId: shipment.customerId,
       operationType: shipment.operationType,
-      transportMode: shipment.transportMode ?? "",
-      origin: shipment.origin ?? "",
-      destination: shipment.destination ?? "",
       reference: shipment.reference ?? "",
       description: shipment.cargo?.description ?? "",
       notes: shipment.notes ?? "",
     })
-    setVehicleId(shipment.vehicleId)
-    setOperatorId(shipment.operatorId)
   }
 
-  const hasRoute = Boolean(form?.transportMode)
+  // El modo de transporte se deriva del tipo de operación; ruta/unidad/operador van por tramo.
+  const transportFor = (operationType: string): string | null => {
+    const item = operationItems.find((i) => i.code === operationType)
+    return (item?.extra as { defaultTransport?: string } | null)?.defaultTransport ?? null
+  }
 
   const mutation = useMutation({
     mutationFn: (data: Parameters<typeof shipmentsApi.update>[1]) =>
@@ -75,16 +68,10 @@ function EditShipmentPage() {
 
   function validate() {
     if (!form) return {}
-    // Captura progresiva: solo cliente + tipo de operación son obligatorios.
-    const e = collectErrors({
+    return collectErrors({
       customerId: form.customerId ? undefined : "Selecciona un cliente",
       operationType: form.operationType ? undefined : "Selecciona el tipo de operación",
     })
-    if (form.origin.trim() && form.destination.trim() &&
-        form.origin.trim().toLowerCase() === form.destination.trim().toLowerCase()) {
-      e["destination"] = "Destino no puede ser igual al origen"
-    }
-    return e
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -101,14 +88,10 @@ function EditShipmentPage() {
     mutation.mutate({
       customerId: form.customerId,
       operationType: form.operationType,
-      transportMode: form.transportMode || null,
-      origin: form.origin || null,
-      destination: form.destination || null,
+      transportMode: transportFor(form.operationType),
       reference: form.reference || null,
       cargo: form.description ? { description: form.description } : null,
       notes: form.notes || null,
-      vehicleId,
-      operatorId,
     })
   }
 
@@ -149,53 +132,19 @@ function EditShipmentPage() {
               options={customers.map((c) => ({ value: c.id, label: `${c.name} (${c.rfc})` }))}
               {...f("customerId")} error={errors["customerId"]}
             />
-            <div className="grid grid-cols-2 gap-4">
-              <Select
-                id="operationType" label="Tipo de operación"
-                options={operationOptions}
-                {...f("operationType")} error={errors["operationType"]}
-              />
-              <Select
-                id="transportMode" label="Modo de transporte (si hay traslado)"
-                placeholder="Sin traslado"
-                options={transportOptions}
-                {...f("transportMode")}
-              />
-            </div>
-
-            {hasRoute && (
-              <div className="grid grid-cols-2 gap-4">
-                <AddressInput
-                  id="origin" label="Origen"
-                  value={form.origin}
-                  error={errors["origin"]}
-                  onChange={(val) => setForm((p) => p && ({ ...p, origin: val }))}
-                />
-                <AddressInput
-                  id="destination" label="Destino"
-                  value={form.destination}
-                  error={errors["destination"]}
-                  onChange={(val) => setForm((p) => p && ({ ...p, destination: val }))}
-                />
-              </div>
-            )}
-
+            <Select
+              id="operationType" label="Tipo de operación"
+              options={operationOptions}
+              {...f("operationType")} error={errors["operationType"]}
+            />
             <Input
               id="reference" label="Referencia (opcional)"
               placeholder="Booking, BL, número de contenedor..."
               {...f("reference")}
             />
-            <Input id="description" label="Descripción del servicio (opcional)" placeholder="Lavado, maniobras... El detalle de mercancías va en el expediente." {...f("description")} />
+            <Input id="description" label="Descripción del servicio (opcional)" placeholder="Flete de contenedor 40', maniobras..." {...f("description")} />
             <Input id="notes" label="Notas (opcional)" {...f("notes")} />
 
-            {hasRoute && (
-              <AutotransporteSelector
-                vehicleId={vehicleId}
-                operatorId={operatorId}
-                defaultSupplierId={shipment?.vehicle?.supplier.id ?? null}
-                onChange={({ vehicleId: v, operatorId: o }) => { setVehicleId(v); setOperatorId(o) }}
-              />
-            )}
             <div className="flex gap-3 pt-2">
               <Link to="/shipments/$id" params={{ id }}>
                 <Button type="button" variant="outline">Cancelar</Button>

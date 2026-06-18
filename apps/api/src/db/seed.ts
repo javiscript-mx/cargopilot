@@ -16,19 +16,22 @@ const CATALOG_SEEDS: { category: string; code: string; name: string; extra?: Pri
   { category: "supplier_type", code: "warehouse",     name: "Almacén / Bodega" },
   { category: "supplier_type", code: "other",         name: "Otro" },
 
-  // Tipos de operación/servicio — un expediente puede ser cualquiera de estos
-  { category: "service_type", code: "IMPORT",         name: "Importación" },
-  { category: "service_type", code: "EXPORT",         name: "Exportación" },
-  { category: "service_type", code: "DOMESTIC",       name: "Flete nacional" },
-  { category: "service_type", code: "TRANSIT",        name: "Tránsito internacional" },
-  { category: "service_type", code: "CUSTOMS",        name: "Despacho aduanal" },
-  { category: "service_type", code: "STORAGE",        name: "Almacenaje" },
-  { category: "service_type", code: "CONTAINER_WASH", name: "Lavado de contenedor" },
-  { category: "service_type", code: "HANDLING",       name: "Maniobras" },
-  { category: "service_type", code: "FUMIGATION",     name: "Fumigación" },
-  { category: "service_type", code: "CUSTODY",        name: "Custodia" },
-  { category: "service_type", code: "INSURANCE",      name: "Seguro de carga" },
-  { category: "service_type", code: "OTHER",          name: "Otro servicio" },
+  // Tipos de operación/servicio. Por ahora SOLO flete terrestre está activo
+  // (decisión 2026-06-18). `extra.defaultTransport` prellena el modo de transporte
+  // en el alta del expediente. Los demás se reactivan desde Catálogos cuando se
+  // operen (o se descomentan aquí).
+  { category: "service_type", code: "DOMESTIC", name: "Flete terrestre", extra: { defaultTransport: "LAND" } },
+  // { category: "service_type", code: "IMPORT",         name: "Importación" },
+  // { category: "service_type", code: "EXPORT",         name: "Exportación" },
+  // { category: "service_type", code: "TRANSIT",        name: "Tránsito internacional" },
+  // { category: "service_type", code: "CUSTOMS",        name: "Despacho aduanal" },
+  // { category: "service_type", code: "STORAGE",        name: "Almacenaje" },
+  // { category: "service_type", code: "CONTAINER_WASH", name: "Lavado de contenedor" },
+  // { category: "service_type", code: "HANDLING",       name: "Maniobras" },
+  // { category: "service_type", code: "FUMIGATION",     name: "Fumigación" },
+  // { category: "service_type", code: "CUSTODY",        name: "Custodia" },
+  // { category: "service_type", code: "INSURANCE",      name: "Seguro de carga" },
+  // { category: "service_type", code: "OTHER",          name: "Otro servicio" },
 
   // Hitos de trazabilidad — eventos típicos en la bitácora de un expediente
   { category: "milestone", code: "BOOKING",         name: "Booking confirmado" },

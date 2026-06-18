@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "./client.js"
 import { auth } from "../lib/auth.js"
 import { SAT_CATALOG_SEEDS } from "./sat-catalogs.seed.js"
+import { seedWorkflowTemplates } from "./workflow.seed.js"
 
 // ─── Catálogos default ───────────────────────────────────────────────────────
 
@@ -217,6 +218,9 @@ async function main() {
     catalogCount++
   }
   console.log(`✓ ${catalogCount} ítems de catálogo verificados`)
+
+  // Plantillas de workflow (Flete terrestre + tramo)
+  await seedWorkflowTemplates()
 
   console.log("Seed completado.")
 }

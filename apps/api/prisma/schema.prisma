@@ -187,6 +187,11 @@ model Shipment {
   merchandise Merchandise[]
   containers  Container[]
 
+  // Proceso / workflow: plantilla instanciada (snapshot), fases y tramos
+  workflowTemplateId String?         // código de la plantilla aplicada (soft ref)
+  stages             ShipmentStage[]
+  legs               ShipmentLeg[]
+
   // Autotransporte (Carta Porte): unidad y operador subcontratados
   vehicleId   String?
   vehicle     Vehicle?  @relation(fields: [vehicleId], references: [id])
@@ -304,6 +309,205 @@ model Merchandise {
   @@index([shipmentId])
   @@index([containerId])
   @@map("merchandise")
+}
+
+// ─── Proceso / Workflow del expediente ───────────────────────────────────────
+// Plantillas DECLARATIVAS (seed; editables por admin a futuro) que se instancian
+// por COPIA-SNAPSHOT al expediente: editar la plantilla NO muta expedientes vivos
+// (igual filosofía que catálogos inmutables). Sin motor de ejecución: las fases
+// pueden correr en paralelo y blockedBy/optional son pistas, no compuertas.
+// El "tramo" (ShipmentLeg) es el sub-workflow de transporte: un expediente tiene
+// 1..N tramos, cada uno con scope local|foraneo y su propio checklist.
+
+model WorkflowTemplate {
+  id            String   @id @default(cuid())
+  code          String   @unique // "flete_terrestre"
+  name          String
+  operationType String?  // liga a service_type (informativo)
+  description   String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stages WorkflowStageTemplate[]
+
+  @@map("workflow_templates")
+}
+
+model WorkflowStageTemplate {
+  id         String           @id @default(cuid())
+  templateId String
+  template   WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  code  String
+  name  String
+  order Int
+  tasks WorkflowTaskTemplate[]
+
+  @@unique([templateId, code])
+  @@map("workflow_stage_templates")
+}
+
+model WorkflowTaskTemplate {
+  id              String                @id @default(cuid())
+  stageTemplateId String
+  stage           WorkflowStageTemplate @relation(fields: [stageTemplateId], references: [id], onDelete: Cascade)
+
+  code                    String
+  name                    String
+  order                   Int
+  isMilestone             Boolean  @default(false)
+  optional                Boolean  @default(false)
+  responsibleRole         String?  // rol sugerido (admin|operator|finance|viewer)
+  responsibleSupplierType String?  // tipo de proveedor sugerido (catálogo supplier_type)
+  requiredDocs            String[] // tipos de documento esperados
+
+  @@unique([stageTemplateId, code])
+  @@map("workflow_task_templates")
+}
+
+// Plantilla del tramo (sub-workflow de transporte)
+model LegTemplate {
+  id        String   @id @default(cuid())
+  code      String   @unique // "tramo_terrestre"
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks LegTaskTemplate[]
+
+  @@map("leg_templates")
+}
+
+model LegTaskTemplate {
+  id            String      @id @default(cuid())
+  legTemplateId String
+  template      LegTemplate @relation(fields: [legTemplateId], references: [id], onDelete: Cascade)
+
+  code                    String
+  name                    String
+  order                   Int
+  scope                   String   @default("any") // any | local | foraneo (filtra al instanciar)
+  isMilestone             Boolean  @default(false)
+  optional                Boolean  @default(false)
+  responsibleRole         String?
+  responsibleSupplierType String?
+  requiredDocs            String[]
+
+  @@unique([legTemplateId, code])
+  @@map("leg_task_templates")
+}
+
+// ── Instancias por expediente ──
+
+model ShipmentStage {
+  id              String   @id @default(cuid())
+  shipmentId      String
+  shipment        Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  stageTemplateId String?  // origen del snapshot; null si se agregó a mano
+
+  code   String
+  name   String
+  order  Int
+  status String @default("pending") // pending | in_progress | done | skipped
+
+  tasks ShipmentTask[]
+
+  @@index([shipmentId])
+  @@map("shipment_stages")
+}
+
+model ShipmentTask {
+  id             String        @id @default(cuid())
+  stageId        String
+  stage          ShipmentStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  shipmentId     String        // denormalizado para queries
+  taskTemplateId String?
+
+  code        String
+  name        String
+  order       Int
+  isMilestone Boolean  @default(false)
+  optional    Boolean  @default(false)
+  status      String   @default("pending") // pending | in_progress | done | skipped | blocked
+
+  assigneeUserId String?   // soft ref a User
+  supplierId     String?   // soft ref a Supplier
+  requiredDocs   String[]
+  plannedAt      DateTime?
+  actualAt       DateTime? // para hitos: fecha real del evento
+  completedAt    DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([shipmentId])
+  @@index([stageId])
+  @@map("shipment_tasks")
+}
+
+model ShipmentLeg {
+  id            String   @id @default(cuid())
+  shipmentId    String
+  shipment      Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  legTemplateId String?
+
+  order  Int
+  scope  String @default("foraneo") // local | foraneo
+  status String @default("pending") // pending | in_progress | done | cancelled
+
+  origin      Json?    // { name, rfc, zip, address, ... } — alimenta Ubicacion de Carta Porte
+  destination Json?
+  distanceKm  Decimal? @db.Decimal(10, 2)
+
+  carrierSupplierId String? // soft ref a Supplier (autotransporte)
+  vehicleId         String? // soft ref a Vehicle
+  operatorId        String? // soft ref a Operator
+
+  plannedPickupAt   DateTime?
+  actualPickupAt    DateTime?
+  plannedDeliveryAt DateTime?
+  actualDeliveryAt  DateTime?
+
+  cartaPorteInvoiceId String? // soft ref a Invoice (CFDI con complemento CP del tramo foráneo)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tasks LegTask[]
+
+  @@index([shipmentId])
+  @@map("shipment_legs")
+}
+
+model LegTask {
+  id             String      @id @default(cuid())
+  legId          String
+  leg            ShipmentLeg @relation(fields: [legId], references: [id], onDelete: Cascade)
+  shipmentId     String      // denormalizado
+  taskTemplateId String?
+
+  code        String
+  name        String
+  order       Int
+  isMilestone Boolean @default(false)
+  optional    Boolean @default(false)
+  status      String  @default("pending")
+
+  assigneeUserId String?
+  supplierId     String?
+  requiredDocs   String[]
+  plannedAt      DateTime?
+  actualAt       DateTime?
+  completedAt    DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([legId])
+  @@index([shipmentId])
+  @@map("leg_tasks")
 }
 
 // Unidad de transporte subcontratada a un proveedor (bloque Autotransporte de Carta Porte)

@@ -113,13 +113,26 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
   const toggleTask = (task: ProcessTask, isLeg: boolean) =>
     taskMutation.mutate({ task, isLeg, done: task.status !== "done" })
 
+  // Avance global del expediente: tareas de fases + tareas de todos los tramos
+  const allTasks = [...process!.stages.flatMap((s) => s.tasks), ...process!.legs.flatMap((l) => l.tasks)]
+  const doneTasks = allTasks.filter((t) => t.status === "done").length
+  const pct = allTasks.length ? Math.round((doneTasks / allTasks.length) * 100) : 0
+
   return (
     <>
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Route className="h-4 w-4 text-[--color-muted-foreground]" /> Proceso
-        </CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Route className="h-4 w-4 text-[--color-muted-foreground]" /> Proceso
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[--color-muted]">
+              <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="whitespace-nowrap text-xs text-[--color-muted-foreground]">{doneTasks}/{allTasks.length}</span>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {/* Fases */}

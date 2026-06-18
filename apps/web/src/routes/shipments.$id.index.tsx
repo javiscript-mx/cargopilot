@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Package, Pencil, Plus, Trash2, Flag, MessageSquare, ArrowRightLeft, FileText, ClipboardCheck, CircleCheck } from "lucide-react"
+import { ArrowLeft, Package, Pencil, Plus, Trash2, Flag, MessageSquare, ArrowRightLeft, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +12,6 @@ import { DocumentsSection } from "@/components/ui/documents-section"
 import { CargoSection } from "@/components/shipments/cargo-section"
 import { ProcessSection } from "@/components/shipments/process-section"
 import { shipmentsApi, STATUS_CONFIG, type ShipmentStatus, type ShipmentEvent } from "@/api/shipments"
-import { merchandiseApi } from "@/api/merchandise"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useSession } from "@/lib/auth-client"
 import { useToast } from "@/components/ui/toast"
@@ -61,11 +60,6 @@ function ShipmentDetailPage() {
   const { data: shipment, isLoading } = useQuery({
     queryKey: ["shipments", id],
     queryFn: () => shipmentsApi.get(id),
-  })
-  // Para la guía de "información pendiente" (dedupe con CargoSection)
-  const { data: merchandise = [] } = useQuery({
-    queryKey: ["merchandise", id],
-    queryFn: () => merchandiseApi.list(id),
   })
   const { items: operationTypes } = useCatalog("service_type")
   const { items: transportModes } = useCatalog("transport_mode")
@@ -167,16 +161,6 @@ function ShipmentDetailPage() {
     ? transportModes.find((t) => t.code === shipment.transportMode)?.name ?? shipment.transportMode
     : null
   const events = shipment.events ?? []
-
-  // ── Información pendiente (consciente del tipo de operación) ──
-  // Solo aplica mientras el expediente está activo; lo que falta depende de si
-  // mueve carga (modo de transporte) o es un servicio puntual.
-  // La ruta y el transporte viven en los tramos (sección Proceso); aquí solo
-  // guiamos sobre datos del expediente: mercancías y referencia documental.
-  const isActive = !["delivered", "cancelled"].includes(shipment.status)
-  const pending: string[] = []
-  if (merchandise.length === 0) pending.push("Mercancías de la carga")
-  if (!shipment.reference) pending.push("Referencia documental (booking, BL, contenedor)")
 
   return (
     <AppLayout>
@@ -361,42 +345,6 @@ function ShipmentDetailPage() {
 
         {/* ── Columna lateral: detalles ── */}
         <div className="flex flex-col gap-4">
-          {/* Información pendiente — guía al operador sobre qué falta capturar */}
-          {isActive && (
-            pending.length > 0 ? (
-              <Card className="border-amber-300 bg-amber-50/50">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base text-amber-800">
-                    <ClipboardCheck className="h-4 w-4" /> Información pendiente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="flex flex-col gap-1.5 text-sm text-amber-900">
-                    {pending.map((item) => (
-                      <li key={item} className="flex items-start gap-2">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                  {canEdit && (
-                    <Link to="/shipments/$id/edit" params={{ id }}>
-                      <Button variant="outline" size="sm" className="mt-3 flex items-center gap-1.5">
-                        <Pencil className="h-3.5 w-3.5" /> Completar datos
-                      </Button>
-                    </Link>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="border-green-300 bg-green-50/50">
-                <CardContent className="flex items-center gap-2 py-3 text-sm font-medium text-green-800">
-                  <CircleCheck className="h-4 w-4" /> Datos completos
-                </CardContent>
-              </Card>
-            )
-          )}
-
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Operación</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-2.5 text-sm">

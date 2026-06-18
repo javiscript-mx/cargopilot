@@ -6,6 +6,7 @@ import { ContainersBlock } from "@/components/shipments/containers-block"
 import { MerchandiseBlock } from "@/components/shipments/merchandise-block"
 import { shipmentsApi } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useToast } from "@/components/ui/toast"
 
 interface Props {
   shipmentId: string
@@ -16,13 +17,18 @@ interface Props {
 // Sección unificada de carga: la modalidad es el "dial" que reconfigura qué se captura.
 export function CargoSection({ shipmentId, cargoType, canEdit }: Props) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { items: cargoTypes, simpleOptions: cargoOptions } = useCatalog("cargo_type")
   const cargoLabel = cargoType ? cargoTypes.find((t) => t.code === cargoType)?.name ?? cargoType : null
   const contenerizada = cargoType === "CONTAINER"
 
   const modalidadMutation = useMutation({
     mutationFn: (value: string) => shipmentsApi.update(shipmentId, { cargoType: value || null }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shipments", shipmentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipments", shipmentId] })
+      toast.success("Modalidad de carga actualizada")
+    },
+    onError: (err: Error) => toast.error("No se pudo actualizar la modalidad", err.message),
   })
 
   return (

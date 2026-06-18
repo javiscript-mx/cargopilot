@@ -5,6 +5,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { invoicesApi, type Invoice } from "@/api/invoices"
+import { useToast } from "@/components/ui/toast"
 
 // Motivos SAT que no requieren folio de sustitución
 const MOTIVES = [
@@ -20,14 +21,17 @@ interface CancelDialogProps {
 
 export function CancelDialog({ invoice, onClose }: CancelDialogProps) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const [motive, setMotive] = useState("02")
 
   const mutation = useMutation({
     mutationFn: () => invoicesApi.cancel(invoice!.id, motive),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      toast.success("Factura cancelada", invoice ? `${invoice.series}-${invoice.folio}` : undefined)
       onClose()
     },
+    onError: (err: Error) => toast.error("No se pudo cancelar la factura", err.message),
   })
 
   if (!invoice) return null
@@ -48,10 +52,6 @@ export function CancelDialog({ invoice, onClose }: CancelDialogProps) {
           value={motive}
           onChange={(e) => setMotive(e.target.value)}
         />
-
-        {mutation.isError && (
-          <p className="text-sm text-[--color-destructive]">{(mutation.error as Error).message}</p>
-        )}
 
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>

@@ -3,6 +3,7 @@ import { FileCheck } from "lucide-react"
 import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { invoicesApi, type Invoice } from "@/api/invoices"
+import { useToast } from "@/components/ui/toast"
 
 interface StampDialogProps {
   invoice: Invoice | null
@@ -11,13 +12,16 @@ interface StampDialogProps {
 
 export function StampDialog({ invoice, onClose }: StampDialogProps) {
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const mutation = useMutation({
     mutationFn: (id: string) => invoicesApi.stamp(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      toast.success("Factura timbrada", invoice ? `${invoice.series}-${invoice.folio}` : undefined)
       onClose()
     },
+    onError: (err: Error) => toast.error("No se pudo timbrar la factura", err.message),
   })
 
   if (!invoice) return null
@@ -60,12 +64,6 @@ export function StampDialog({ invoice, onClose }: StampDialogProps) {
             <span>Total</span><span>{fmt(total)}</span>
           </div>
         </div>
-
-        {mutation.isError && (
-          <p className="text-sm text-[--color-destructive]">
-            {(mutation.error as Error).message}
-          </p>
-        )}
 
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>

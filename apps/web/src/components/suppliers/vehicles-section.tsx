@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { vehiclesApi, VEHICLE_STATUS_LABELS, type VehicleStatus } from "@/api/vehicles"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useSession } from "@/lib/auth-client"
+import { useToast } from "@/components/ui/toast"
 
 const EMPTY = {
   plates: "", economicNumber: "", year: "", configVehicular: "",
@@ -20,6 +21,7 @@ const SEARCH_THRESHOLD = 5
 
 export function VehiclesSection({ supplierId }: { supplierId: string }) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: session } = useSession()
   const isAdmin = (session?.user as { role?: string })?.role === "admin"
 
@@ -61,15 +63,26 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
         insurer: form.insurer || null,
         insurancePolicy: form.insurancePolicy || null,
       }),
-    onSuccess: () => { invalidate(); setForm(EMPTY); setShow(false); setError("") },
+    onSuccess: () => {
+      invalidate(); setForm(EMPTY); setShow(false); setError("")
+      toast.success("Unidad agregada")
+    },
     onError: (err: Error) => setError(err.message),
   })
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: VehicleStatus }) => vehiclesApi.setStatus(id, status),
-    onSuccess: invalidate,
+    onSuccess: (_, { status }) => {
+      invalidate()
+      toast.success("Estado de la unidad actualizado", VEHICLE_STATUS_LABELS[status].label)
+    },
+    onError: (err: Error) => toast.error("No se pudo actualizar la unidad", err.message),
   })
-  const deleteMutation = useMutation({ mutationFn: vehiclesApi.delete, onSuccess: invalidate })
+  const deleteMutation = useMutation({
+    mutationFn: vehiclesApi.delete,
+    onSuccess: () => { invalidate(); toast.success("Unidad dada de baja") },
+    onError: (err: Error) => toast.error("No se pudo dar de baja la unidad", err.message),
+  })
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()

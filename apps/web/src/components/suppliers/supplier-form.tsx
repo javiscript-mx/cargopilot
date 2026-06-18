@@ -12,6 +12,7 @@ import { suppliersApi, type Supplier, type CreateSupplierInput } from "@/api/sup
 import { documentsApi } from "@/api/documents"
 import { PendingFilesPicker } from "@/components/ui/documents-section"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useToast } from "@/components/ui/toast"
 import { validateRfc, validateEmail, validatePhone, validateRequired, collectErrors } from "@/lib/validators"
 
 const EMPTY_FORM = {
@@ -27,6 +28,7 @@ interface Props {
 export function SupplierForm({ mode, supplier }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { simpleOptions: typeOptions, isLoading: typesLoading } = useCatalog("supplier_type")
 
   const [form, setForm] = useState(
@@ -60,22 +62,25 @@ export function SupplierForm({ mode, supplier }: Props) {
       }
       queryClient.invalidateQueries({ queryKey: ["suppliers"] })
       if (failed.length) {
-        alert(`Proveedor creado, pero fallaron estos archivos: ${failed.join(", ")}. Puedes reintentarlo desde Editar.`)
+        toast.error("Proveedor creado, pero fallaron archivos", `${failed.join(", ")}. Reintenta desde Editar.`)
+      } else {
+        toast.success("Proveedor creado", created.name)
       }
       navigate({ to: "/suppliers" })
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudo crear el proveedor", err.message),
   })
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<CreateSupplierInput>) =>
       suppliersApi.update(supplier!.id, data),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] })
       queryClient.invalidateQueries({ queryKey: ["suppliers", supplier!.id] })
+      toast.success("Cambios guardados", updated.name)
       navigate({ to: "/suppliers/$id", params: { id: supplier!.id } })
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudieron guardar los cambios", err.message),
   })
 
   const isPending = createMutation.isPending || updateMutation.isPending
@@ -93,7 +98,11 @@ export function SupplierForm({ mode, supplier }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
 
     const data: CreateSupplierInput = {
@@ -171,7 +180,6 @@ export function SupplierForm({ mode, supplier }: Props) {
               <PendingFilesPicker files={pendingFiles} onChange={setPendingFiles} disabled={isPending} />
             )}
 
-            {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
             <div className="flex gap-3 pt-2">
               {mode === "edit" && supplier ? (
                 <Link to="/suppliers/$id" params={{ id: supplier.id }}>

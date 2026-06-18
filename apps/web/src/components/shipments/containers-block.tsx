@@ -7,11 +7,13 @@ import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { containersApi, type Container } from "@/api/containers"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useToast } from "@/components/ui/toast"
 
 const EMPTY = { number: "", type: "", seal: "", tare: "", notes: "" }
 
 export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; canEdit: boolean }) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: items = [] } = useQuery({
     queryKey: ["containers", shipmentId],
     queryFn: () => containersApi.list(shipmentId),
@@ -37,10 +39,18 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
       }
       return editingId ? containersApi.update(editingId, payload) : containersApi.create({ shipmentId, ...payload })
     },
-    onSuccess: () => { invalidate(); close() },
+    onSuccess: () => {
+      invalidate()
+      toast.success(editingId ? "Contenedor actualizado" : "Contenedor agregado")
+      close()
+    },
     onError: (err: Error) => setError(err.message),
   })
-  const deleteMutation = useMutation({ mutationFn: containersApi.delete, onSuccess: invalidate })
+  const deleteMutation = useMutation({
+    mutationFn: containersApi.delete,
+    onSuccess: () => { invalidate(); toast.success("Contenedor eliminado") },
+    onError: (err: Error) => toast.error("No se pudo eliminar el contenedor", err.message),
+  })
 
   function openNew() { setEditingId(null); setForm(EMPTY); setError(""); setShow(true) }
   function openEdit(c: Container) {

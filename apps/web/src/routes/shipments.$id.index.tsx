@@ -14,6 +14,7 @@ import { shipmentsApi, STATUS_CONFIG, type ShipmentStatus, type ShipmentEvent } 
 import { merchandiseApi } from "@/api/merchandise"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useSession } from "@/lib/auth-client"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/shipments/$id/")({
   component: ShipmentDetailPage,
@@ -51,6 +52,7 @@ function formatDateTime(iso: string): string {
 function ShipmentDetailPage() {
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role
   const canEdit = role === "admin" || role === "operator"
@@ -75,7 +77,11 @@ function ShipmentDetailPage() {
 
   const statusMutation = useMutation({
     mutationFn: (status: ShipmentStatus) => shipmentsApi.updateStatus(id, status),
-    onSuccess: invalidate,
+    onSuccess: (_, status) => {
+      invalidate()
+      toast.success("Estado actualizado", STATUS_CONFIG[status]?.label ?? status)
+    },
+    onError: (err: Error) => toast.error("No se pudo cambiar el estado", err.message),
   })
 
   // ── Formulario de evento ──
@@ -106,13 +112,18 @@ function ShipmentDetailPage() {
       setEventForm({ kind: "milestone", milestone: "", title: "", detail: "", occurredAt: "" })
       setShowEventForm(false)
       setEventError("")
+      toast.success("Evento agregado a la bitácora")
     },
     onError: (err: Error) => setEventError(err.message),
   })
 
   const deleteEventMutation = useMutation({
     mutationFn: (eventId: string) => shipmentsApi.deleteEvent(id, eventId),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success("Evento eliminado")
+    },
+    onError: (err: Error) => toast.error("No se pudo eliminar el evento", err.message),
   })
 
   function handleAddEvent(e: React.FormEvent) {

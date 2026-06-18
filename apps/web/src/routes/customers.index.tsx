@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
-import { Building2, Plus, Pencil } from "lucide-react"
+import { Building2, Plus, Pencil, ChevronRight } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -75,7 +75,7 @@ function CustomersPage() {
                 {customers.map((c) => (
                   <li key={c.id}>
                     <Link
-                      to="/customers/$id/edit"
+                      to="/customers/$id"
                       params={{ id: c.id }}
                       className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[--color-muted]/50"
                     >
@@ -96,7 +96,7 @@ function CustomersPage() {
                           </p>
                         )}
                       </div>
-                      <Pencil className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
                     </Link>
                   </li>
                 ))}
@@ -119,7 +119,9 @@ function CustomersPage() {
               <tbody>
                 {customers.map((c) => (
                   <tr key={c.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/50">
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <Link to="/customers/$id" params={{ id: c.id }} className="hover:underline">{c.name}</Link>
+                    </td>
                     <td className="px-4 py-3 text-[--color-muted-foreground]">{c.legalName ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs">{c.rfc}</td>
                     <td className="px-4 py-3 text-[--color-muted-foreground]">{c.email ?? "—"}</td>

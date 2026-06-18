@@ -14,6 +14,7 @@ import { shipmentsApi } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { collectErrors } from "@/lib/validators"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/shipments/new")({
   component: NewShipmentPage,
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/shipments/new")({
 function NewShipmentPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
   const { simpleOptions: operationOptions, isLoading: opsLoading } = useCatalog("service_type")
   const { simpleOptions: transportOptions } = useCatalog("transport_mode")
@@ -42,9 +44,10 @@ function NewShipmentPage() {
     mutationFn: shipmentsApi.create,
     onSuccess: (shipment) => {
       queryClient.invalidateQueries({ queryKey: ["shipments"] })
+      toast.success("Expediente creado", shipment.folio)
       navigate({ to: "/shipments/$id", params: { id: shipment.id } })
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudo crear el expediente", err.message),
   })
 
   function validate() {
@@ -64,7 +67,11 @@ function NewShipmentPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
     mutation.mutate({
       customerId: form.customerId,
@@ -180,7 +187,6 @@ function NewShipmentPage() {
           </CardContent>
         </Card>
 
-        {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
         <div className="flex gap-3">
           <Link to="/shipments"><Button type="button" variant="outline">Cancelar</Button></Link>
           <Button type="submit" loading={mutation.isPending}>Crear expediente</Button>

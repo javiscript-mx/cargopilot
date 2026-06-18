@@ -16,6 +16,7 @@ import { operatorsApi } from "@/api/operators"
 import { documentsApi } from "@/api/documents"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useSession } from "@/lib/auth-client"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/suppliers/$id")({
   component: SupplierDetailPage,
@@ -25,6 +26,7 @@ function SupplierDetailPage() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role
   const isAdmin = role === "admin"
@@ -61,8 +63,10 @@ function SupplierDetailPage() {
     mutationFn: () => suppliersApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] })
+      toast.success("Proveedor eliminado", supplier?.name)
       navigate({ to: "/suppliers" })
     },
+    onError: (err: Error) => toast.error("No se pudo eliminar el proveedor", err.message),
   })
 
   if (isLoading) {

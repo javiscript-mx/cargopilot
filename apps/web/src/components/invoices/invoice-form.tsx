@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { invoicesApi } from "@/api/invoices"
 import { customersApi } from "@/api/customers"
 import { shipmentsApi } from "@/api/shipments"
+import { useToast } from "@/components/ui/toast"
 
 interface InvoiceFormProps {
   open: boolean
@@ -47,6 +48,7 @@ const emptyItem = (): LineItem => ({
 
 export function InvoiceForm({ open, onClose }: InvoiceFormProps) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
   const { data: shipments = [] } = useQuery({ queryKey: ["shipments"], queryFn: shipmentsApi.list })
 
@@ -61,10 +63,11 @@ export function InvoiceForm({ open, onClose }: InvoiceFormProps) {
     mutationFn: invoicesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      toast.success("Factura borrador creada")
       resetForm()
       onClose()
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudo crear la factura", err.message),
   })
 
   function resetForm() {
@@ -90,7 +93,11 @@ export function InvoiceForm({ open, onClose }: InvoiceFormProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
     mutation.mutate({
       customerId,
@@ -219,7 +226,6 @@ export function InvoiceForm({ open, onClose }: InvoiceFormProps) {
           </div>
         </div>
 
-        {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" loading={mutation.isPending}>Crear factura borrador</Button>

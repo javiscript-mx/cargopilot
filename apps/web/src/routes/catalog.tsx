@@ -12,6 +12,7 @@ import { catalogApi, CATALOG_CATEGORY_LABELS, CATALOG_GROUPS, type CatalogCatego
 import { authClient } from "@/lib/auth-client"
 import { validateCatalogCode, validateRequired, collectErrors } from "@/lib/validators"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/catalog")({
   beforeLoad: async () => {
@@ -49,6 +50,7 @@ const EMPTY_FORM = { code: "", name: "", autotransporte: false }
 
 function CatalogPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const [activeCategory, setActiveCategory] = useState<CatalogCategory>("supplier_type")
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -84,8 +86,9 @@ function CatalogPage() {
       setForm(EMPTY_FORM)
       setShowForm(false)
       setErrors({})
+      toast.success("Elemento agregado al catálogo")
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudo agregar el elemento", err.message),
   })
 
   // Editar = baja lógica + alta nueva (vía API)
@@ -95,19 +98,29 @@ function CatalogPage() {
     onSuccess: () => {
       invalidate()
       setEditingItem(null)
+      toast.success("Elemento actualizado")
     },
+    onError: (err: Error) => toast.error("No se pudo actualizar el elemento", err.message),
   })
 
   // Activar / desactivar (baja lógica)
   const setActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       catalogApi.setActive(id, active),
-    onSuccess: invalidate,
+    onSuccess: (_, { active }) => {
+      invalidate()
+      toast.success(active ? "Elemento reactivado" : "Elemento desactivado")
+    },
+    onError: (err: Error) => toast.error("No se pudo cambiar el estado", err.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: catalogApi.deleteItem,
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success("Elemento dado de baja")
+    },
+    onError: (err: Error) => toast.error("No se pudo dar de baja el elemento", err.message),
   })
 
   function selectCategory(cat: CatalogCategory) {
@@ -123,7 +136,11 @@ function CatalogPage() {
       code: validateCatalogCode(form.code),
       name: validateRequired(form.name, "Nombre"),
     })
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     const extra = activeCategory === "supplier_type" && form.autotransporte ? { autotransporte: true } : null
     createMutation.mutate({ category: activeCategory, code: form.code, name: form.name, active: true, extra })
   }
@@ -262,7 +279,6 @@ function CatalogPage() {
                         </span>
                       </label>
                     )}
-                    {errors["general"] && <p className="mt-2 text-xs text-[--color-destructive]">{errors["general"]}</p>}
                     <div className="mt-3 flex gap-2">
                       <Button type="submit" size="sm" loading={createMutation.isPending}>Guardar</Button>
                       <Button type="button" size="sm" variant="outline" onClick={() => { setShowForm(false); setErrors({}) }}>

@@ -14,6 +14,7 @@ import { useCatalog } from "@/hooks/use-catalog"
 import { Badge } from "@/components/ui/badge"
 import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
 import { validateRequired, validateQuantity, validateUnitPrice } from "@/lib/validators"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/invoices/new")({
   component: NewInvoicePage,
@@ -25,6 +26,7 @@ const emptyItem = (): LineItem => ({ description: "", quantity: "1", unitPrice: 
 function NewInvoicePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
   const { data: shipments = [] } = useQuery({ queryKey: ["shipments"], queryFn: shipmentsApi.list })
   const { items: cfdiUseItems } = useCatalog("sat_cfdi_use")
@@ -80,9 +82,10 @@ function NewInvoicePage() {
     mutationFn: invoicesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      toast.success("Factura borrador creada")
       navigate({ to: "/invoices" })
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudo crear la factura", err.message),
   })
 
   function updateItem(idx: number, field: keyof LineItem, value: string) {
@@ -109,7 +112,11 @@ function NewInvoicePage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", errs["general"] ?? "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
     mutation.mutate({
       customerId,
@@ -248,7 +255,6 @@ function NewInvoicePage() {
           </CardContent>
         </Card>
 
-        {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
 
         <div className="flex gap-3">
           <Link to="/invoices"><Button type="button" variant="outline">Cancelar</Button></Link>

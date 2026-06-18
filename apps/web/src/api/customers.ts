@@ -69,6 +69,33 @@ export type CustomerPayload = Omit<Customer, "id" | "createdAt" | "creditLimit" 
   addresses?: Omit<CustomerAddress, "id">[]
 }
 
+export interface CustomerShipmentRef {
+  id: string
+  folio: string
+  status: string
+  operationType: string
+  origin: string | null
+  destination: string | null
+  createdAt: string
+}
+
+export interface CustomerInvoiceRef {
+  id: string
+  series: string
+  folio: string
+  status: string
+  total: string
+  stampedAt: string | null
+  createdAt: string
+}
+
+export interface CustomerDetail extends Customer {
+  shipments: CustomerShipmentRef[]
+  invoices: CustomerInvoiceRef[]
+  billedExposure: string
+  activeShipments: number
+}
+
 export interface PageParams { page: number; pageSize: number; search?: string }
 export function pageQuery({ page, pageSize, search }: PageParams): string {
   const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
@@ -79,7 +106,7 @@ export function pageQuery({ page, pageSize, search }: PageParams): string {
 export const customersApi = {
   list: () => apiClient.get<Customer[]>("/customers"),
   listPaged: (params: PageParams) => apiClient.getPaged<Customer>(`/customers?${pageQuery(params)}`),
-  get: (id: string) => apiClient.get<Customer>(`/customers/${id}`),
+  get: (id: string) => apiClient.get<CustomerDetail>(`/customers/${id}`),
   create: (data: CustomerPayload) => apiClient.post<Customer>("/customers", data),
   update: (id: string, data: Partial<CustomerPayload>) => apiClient.put<Customer>(`/customers/${id}`, data),
 }

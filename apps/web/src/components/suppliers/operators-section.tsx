@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { operatorsApi, OPERATOR_STATUS_LABELS, type OperatorStatus } from "@/api/operators"
 import { useSession } from "@/lib/auth-client"
+import { useToast } from "@/components/ui/toast"
 
 const EMPTY = { name: "", rfc: "", licenseNumber: "" }
 
@@ -15,6 +16,7 @@ const SEARCH_THRESHOLD = 5
 
 export function OperatorsSection({ supplierId }: { supplierId: string }) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: session } = useSession()
   const isAdmin = (session?.user as { role?: string })?.role === "admin"
 
@@ -46,14 +48,25 @@ export function OperatorsSection({ supplierId }: { supplierId: string }) {
         rfc: form.rfc.trim().toUpperCase() || null,
         licenseNumber: form.licenseNumber || null,
       }),
-    onSuccess: () => { invalidate(); setForm(EMPTY); setShow(false); setError("") },
+    onSuccess: () => {
+      invalidate(); setForm(EMPTY); setShow(false); setError("")
+      toast.success("Operador agregado")
+    },
     onError: (err: Error) => setError(err.message),
   })
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OperatorStatus }) => operatorsApi.setStatus(id, status),
-    onSuccess: invalidate,
+    onSuccess: (_, { status }) => {
+      invalidate()
+      toast.success("Estado del operador actualizado", OPERATOR_STATUS_LABELS[status].label)
+    },
+    onError: (err: Error) => toast.error("No se pudo actualizar el operador", err.message),
   })
-  const deleteMutation = useMutation({ mutationFn: operatorsApi.delete, onSuccess: invalidate })
+  const deleteMutation = useMutation({
+    mutationFn: operatorsApi.delete,
+    onSuccess: () => { invalidate(); toast.success("Operador dado de baja") },
+    onError: (err: Error) => toast.error("No se pudo dar de baja al operador", err.message),
+  })
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()

@@ -4,6 +4,7 @@ import { FileText, Upload, Download, Trash2, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { documentsApi, type DocumentEntityType } from "@/api/documents"
+import { useToast } from "@/components/ui/toast"
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.xml,.doc,.docx,.xls,.xlsx"
 
@@ -99,6 +100,7 @@ interface DocumentsSectionProps {
 
 export function DocumentsSection({ entityType, entityId, readOnly = false, bare = false }: DocumentsSectionProps) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -119,13 +121,18 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", entityType, entityId] })
       setError(null)
+      toast.success("Documento subido")
     },
     onError: (err: Error) => setError(err.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: documentsApi.delete,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["documents", entityType, entityId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", entityType, entityId] })
+      toast.success("Documento eliminado")
+    },
+    onError: (err: Error) => toast.error("No se pudo eliminar el documento", err.message),
   })
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

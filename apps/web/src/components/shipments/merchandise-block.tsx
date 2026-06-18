@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { merchandiseApi, type Merchandise } from "@/api/merchandise"
 import { containersApi } from "@/api/containers"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useToast } from "@/components/ui/toast"
 
 const EMPTY = {
   description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", notes: "",
@@ -17,6 +18,7 @@ export function MerchandiseBlock({
   shipmentId, canEdit, contenerizada,
 }: { shipmentId: string; canEdit: boolean; contenerizada: boolean }) {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { data: items = [] } = useQuery({
     queryKey: ["merchandise", shipmentId],
     queryFn: () => merchandiseApi.list(shipmentId),
@@ -53,10 +55,18 @@ export function MerchandiseBlock({
       }
       return editingId ? merchandiseApi.update(editingId, payload) : merchandiseApi.create({ shipmentId, ...payload })
     },
-    onSuccess: () => { invalidate(); close() },
+    onSuccess: () => {
+      invalidate()
+      toast.success(editingId ? "Mercancía actualizada" : "Mercancía agregada")
+      close()
+    },
     onError: (err: Error) => setError(err.message),
   })
-  const deleteMutation = useMutation({ mutationFn: merchandiseApi.delete, onSuccess: invalidate })
+  const deleteMutation = useMutation({
+    mutationFn: merchandiseApi.delete,
+    onSuccess: () => { invalidate(); toast.success("Mercancía eliminada") },
+    onError: (err: Error) => toast.error("No se pudo eliminar la mercancía", err.message),
+  })
 
   function openNew() { setEditingId(null); setForm(EMPTY); setError(""); setShow(true) }
   function openEdit(m: Merchandise) {

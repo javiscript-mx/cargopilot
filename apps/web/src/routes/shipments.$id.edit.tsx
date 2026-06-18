@@ -13,6 +13,7 @@ import { shipmentsApi } from "@/api/shipments"
 import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { collectErrors } from "@/lib/validators"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/shipments/$id/edit")({
   component: EditShipmentPage,
@@ -22,6 +23,7 @@ function EditShipmentPage() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const { data: shipment, isLoading } = useQuery({
     queryKey: ["shipments", id],
@@ -65,9 +67,10 @@ function EditShipmentPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shipments"] })
       queryClient.invalidateQueries({ queryKey: ["shipments", id] })
+      toast.success("Cambios guardados", shipment?.folio)
       navigate({ to: "/shipments/$id", params: { id } })
     },
-    onError: (err: Error) => setErrors({ general: err.message }),
+    onError: (err: Error) => toast.error("No se pudieron guardar los cambios", err.message),
   })
 
   function validate() {
@@ -88,7 +91,11 @@ function EditShipmentPage() {
     e.preventDefault()
     if (!form) return
     const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
     mutation.mutate({
       customerId: form.customerId,
@@ -188,7 +195,6 @@ function EditShipmentPage() {
                 onChange={({ vehicleId: v, operatorId: o }) => { setVehicleId(v); setOperatorId(o) }}
               />
             )}
-            {errors["general"] && <p className="text-sm text-[--color-destructive]">{errors["general"]}</p>}
             <div className="flex gap-3 pt-2">
               <Link to="/shipments/$id" params={{ id }}>
                 <Button type="button" variant="outline">Cancelar</Button>

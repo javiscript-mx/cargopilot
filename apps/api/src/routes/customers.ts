@@ -173,10 +173,23 @@ export async function customersRoutes(app: FastifyInstance) {
       include: {
         ...includeMaster,
         shipments: { orderBy: { createdAt: "desc" }, take: 10 },
+        invoices: { orderBy: { createdAt: "desc" }, take: 10 },
       },
     })
     if (!customer) return reply.status(404).send({ error: "Cliente no encontrado" })
-    return reply.send(customer)
+
+    // Exposición facturada = facturas timbradas no canceladas (proxy de saldo;
+    // aún no hay módulo de pagos para calcular cuentas por cobrar reales).
+    const [exposure, activeShipments] = await prisma.$transaction([
+      prisma.invoice.aggregate({ where: { customerId: id, status: "stamped" }, _sum: { total: true } }),
+      prisma.shipment.count({ where: { customerId: id, status: { notIn: ["delivered", "cancelled"] } } }),
+    ])
+
+    return reply.send({
+      ...customer,
+      billedExposure: exposure._sum.total?.toString() ?? "0",
+      activeShipments,
+    })
   })
 
   app.post(

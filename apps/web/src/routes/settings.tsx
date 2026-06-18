@@ -12,6 +12,7 @@ import { useSettings, SETTINGS_DEFAULTS } from "@/hooks/use-settings"
 import { useCatalog } from "@/hooks/use-catalog"
 import { authClient } from "@/lib/auth-client"
 import { validateRfc, validateCp, validateSeries, validateFolioPrefix, validateRequired, validateGcsBucket, collectErrors } from "@/lib/validators"
+import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async () => {
@@ -43,10 +44,10 @@ const COUNTRY_OPTIONS = [
 
 function SettingsPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { settings, isLoading } = useSettings()
   const { options: regimenOptions } = useCatalog("sat_tax_regime")
   const [form, setForm] = useState<AppSettings>(SETTINGS_DEFAULTS)
-  const [saved, setSaved] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -57,9 +58,9 @@ function SettingsPage() {
     mutationFn: settingsApi.patch,
     onSuccess: (updated) => {
       queryClient.setQueryData(["settings"], updated)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      toast.success("Configuración guardada")
     },
+    onError: (err: Error) => toast.error("No se pudo guardar la configuración", err.message),
   })
 
   function set(key: keyof AppSettings, value: string) {
@@ -88,7 +89,11 @@ function SettingsPage() {
       "shipments.folioPrefix": validateFolioPrefix(form["shipments.folioPrefix"] as string),
       "storage.bucket": validateGcsBucket(form["storage.bucket"] as string),
     })
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      return
+    }
     setErrors({})
     mutation.mutate(form)
   }
@@ -278,12 +283,6 @@ function SettingsPage() {
             <Save className="h-4 w-4" />
             Guardar cambios
           </Button>
-          {saved && (
-            <span className="text-sm text-green-600 font-medium">✓ Configuración guardada</span>
-          )}
-          {mutation.isError && (
-            <span className="text-sm text-[--color-destructive]">Error al guardar</span>
-          )}
         </div>
 
       </form>

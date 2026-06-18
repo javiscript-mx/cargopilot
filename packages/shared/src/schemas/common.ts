@@ -11,5 +11,5 @@ export const IdParamSchema = z.object({
 
 export type Pagination = z.infer<typeof PaginationSchema>
 
-export const ROLES = ["admin", "operator", "viewer"] as const
+export const ROLES = ["admin", "operator", "finance", "viewer"] as const
 export type Role = (typeof ROLES)[number]

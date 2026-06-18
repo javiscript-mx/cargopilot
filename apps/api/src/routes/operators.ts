@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 const OPERATOR_STATUSES = ["pending", "authorized", "suspended"] as const
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/
@@ -32,7 +32,7 @@ export async function operatorsRoutes(app: FastifyInstance) {
     return reply.send(operators)
   })
 
-  app.post("/operators", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.post("/operators", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const body = OperatorSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
     const supplier = await prisma.supplier.findUnique({ where: { id: body.data.supplierId } })
@@ -49,7 +49,7 @@ export async function operatorsRoutes(app: FastifyInstance) {
     return reply.status(201).send(operator)
   })
 
-  app.put("/operators/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.put("/operators/:id", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const body = OperatorSchema.partial().safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -67,7 +67,7 @@ export async function operatorsRoutes(app: FastifyInstance) {
     return reply.send(operator)
   })
 
-  app.patch("/operators/:id/status", { preHandler: requireRole("admin") }, async (request, reply) => {
+  app.patch("/operators/:id/status", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const { status } = (request.body ?? {}) as { status?: string }
     if (!status || !OPERATOR_STATUSES.includes(status as (typeof OPERATOR_STATUSES)[number])) {
@@ -77,7 +77,7 @@ export async function operatorsRoutes(app: FastifyInstance) {
     return reply.send(operator)
   })
 
-  app.delete("/operators/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.delete("/operators/:id", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.operator.update({ where: { id }, data: { active: false } })
     return reply.status(204).send()

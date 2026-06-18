@@ -2,8 +2,10 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { LayoutDashboard, Users, Building2, Package, FileText, Settings, Truck, BookOpen, LogOut, Menu, X, ChevronLeft } from "lucide-react"
 import { useSession, signOut } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/ui/logo"
+import type { Permission } from "@hm/shared"
 
 // ── Sidebar palette (hardcoded so it works on fixed/sticky elements) ──────────
 const S = {
@@ -17,21 +19,21 @@ const S = {
   logo:          "#f49c2f",
 }
 
-const navItems = [
+const navItems: { to: string; label: string; icon: typeof LayoutDashboard; perm?: Permission }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/shipments", label: "Expedientes", icon: Package },
   { to: "/customers", label: "Clientes", icon: Building2 },
   { to: "/invoices", label: "Facturas", icon: FileText },
   { to: "/suppliers", label: "Proveedores", icon: Truck },
-  { to: "/users", label: "Usuarios", icon: Users, adminOnly: true },
-  { to: "/catalog", label: "Catálogos", icon: BookOpen, adminOnly: true },
-  { to: "/settings", label: "Configuración", icon: Settings, adminOnly: true },
+  { to: "/users", label: "Usuarios", icon: Users, perm: "users.read" },
+  { to: "/catalog", label: "Catálogos", icon: BookOpen, perm: "catalog.manage" },
+  { to: "/settings", label: "Configuración", icon: Settings, perm: "settings.manage" },
 ]
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
   const navigate = useNavigate()
-  const role = (session?.user as { role?: string })?.role
+  const { can } = useCan()
 
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -89,7 +91,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5 p-2">
         {navItems
-          .filter((item) => !item.adminOnly || role === "admin")
+          .filter((item) => !item.perm || can(item.perm))
           .map((item) => {
             const isActive = location.pathname === item.to ||
               (item.to !== "/" && location.pathname.startsWith(item.to))

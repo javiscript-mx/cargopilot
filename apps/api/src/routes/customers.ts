@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/
@@ -194,7 +194,7 @@ export async function customersRoutes(app: FastifyInstance) {
 
   app.post(
     "/customers",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("customers.write") },
     async (request, reply) => {
       const body = CustomerSchema.safeParse(request.body)
       if (!body.success) {
@@ -220,7 +220,7 @@ export async function customersRoutes(app: FastifyInstance) {
 
   app.put(
     "/customers/:id",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("customers.write") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const body = CustomerSchema.partial().safeParse(request.body)

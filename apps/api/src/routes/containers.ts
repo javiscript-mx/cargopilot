@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 // Contenedor de un expediente (modalidad contenerizada) — nodo Contenedor de Carta Porte
 const ContainerSchema = z.object({
@@ -23,7 +23,7 @@ export async function containersRoutes(app: FastifyInstance) {
     return reply.send(items)
   })
 
-  app.post("/containers", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.post("/containers", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const body = ContainerSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
     const shipment = await prisma.shipment.findUnique({ where: { id: body.data.shipmentId } })
@@ -41,7 +41,7 @@ export async function containersRoutes(app: FastifyInstance) {
     return reply.status(201).send(item)
   })
 
-  app.put("/containers/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.put("/containers/:id", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const body = ContainerSchema.omit({ shipmentId: true }).partial().safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -59,7 +59,7 @@ export async function containersRoutes(app: FastifyInstance) {
   })
 
   // Borra el contenedor; las mercancías asignadas quedan sin contenedor (SetNull)
-  app.delete("/containers/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.delete("/containers/:id", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.container.delete({ where: { id } })
     return reply.status(204).send()

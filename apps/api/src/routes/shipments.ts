@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
 
@@ -90,7 +90,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
   app.post(
     "/shipments",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("shipments.write") },
     async (request, reply) => {
       const body = ShipmentSchema.safeParse(request.body)
       if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -131,7 +131,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
   app.put(
     "/shipments/:id",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("shipments.write") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const body = ShipmentSchema.partial().safeParse(request.body)
@@ -152,7 +152,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
   app.patch(
     "/shipments/:id/status",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("shipments.changeStatus") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const { status } = request.body as { status: string }
@@ -188,7 +188,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
   app.post(
     "/shipments/:id/events",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("shipments.write") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const body = EventSchema.safeParse(request.body)
@@ -213,7 +213,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
   app.delete(
     "/shipments/:id/events/:eventId",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("shipments.delete") },
     async (request, reply) => {
       const { eventId } = request.params as { id: string; eventId: string }
       const event = await prisma.shipmentEvent.findUnique({ where: { id: eventId } })

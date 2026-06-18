@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { uploadObject, getSignedUrl, streamObject, deleteObject, getStorageStatus } from "../lib/storage.js"
 
 const ENTITY_TYPES = new Set(["customer", "supplier", "shipment", "invoice"])
@@ -46,7 +46,7 @@ export async function documentsRoutes(app: FastifyInstance) {
   // Subir documento (multipart/form-data: file, entityType, entityId)
   app.post(
     "/documents/upload",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("documents.write") },
     async (request, reply) => {
       const file = await request.file()
       if (!file) return reply.status(400).send({ error: "No se recibió ningún archivo" })
@@ -137,7 +137,7 @@ export async function documentsRoutes(app: FastifyInstance) {
   // Eliminar documento (BD + objeto en GCS)
   app.delete(
     "/documents/:id",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("documents.write") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const document = await prisma.document.findUnique({ where: { id } })

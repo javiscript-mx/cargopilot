@@ -5,7 +5,7 @@
 Sistema de administración y operación para un negocio de **forwarding logístico** (agente de carga / freight forwarder). Gestiona el ciclo completo de operaciones: expedientes de envío, clientes, y facturación electrónica conforme al SAT mexicano (CFDI 4.0).
 
 **Estado actual:** POC / MVP funcional con las siguientes capacidades:
-- Autenticación y gestión de usuarios con roles (admin, operator, viewer)
+- Autenticación y gestión de usuarios con RBAC por privilegios (roles: admin, operator, finance, viewer — matriz en `@hm/shared/schemas/rbac.ts`)
 - Catálogo de clientes con RFC
 - Expedientes de envío con máquina de estados y línea de tiempo visual
 - Facturación electrónica: crear borrador → timbrar vía Facturama → descargar PDF/XML
@@ -82,7 +82,7 @@ hm-sistema/
 │   │   │   │   └── require-auth.ts ← Guards: requireAuth, requireRole(...)
 │   │   │   ├── routes/
 │   │   │   │   ├── auth.ts         ← Proxy a better-auth handler (/api/auth/*)
-│   │   │   │   ├── users.ts        ← GET/POST /users, PATCH /users/:id/role
+│   │   │   │   ├── users.ts        ← GET/POST /users, PATCH /users/:id, reset-password
 │   │   │   │   ├── customers.ts    ← CRUD /customers
 │   │   │   │   ├── shipments.ts    ← CRUD /shipments + PATCH status
 │   │   │   │   └── invoices.ts     ← /invoices: crear, timbrar, cancelar, PDF
@@ -155,7 +155,7 @@ hm-sistema/
 ## Modelo de datos (Prisma)
 
 ### Tablas de autenticación (better-auth)
-- **User** — id, name, email, role (admin|operator|viewer), emailVerified
+- **User** — id, name, email, role (admin|operator|finance|viewer), active, emailVerified
 - **Session** — token, expiresAt, userId
 - **Account** — para OAuth futuro
 - **Verification** — para verificación de email futura
@@ -174,9 +174,10 @@ Todos bajo prefijo `/api`. Autenticación via cookie de sesión (better-auth).
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
 | ALL | `/api/auth/*` | — | better-auth handler |
-| GET | `/api/users` | admin | Listar usuarios |
-| POST | `/api/users` | admin | Crear usuario |
-| PATCH | `/api/users/:id/role` | admin | Cambiar rol |
+| GET | `/api/users` | users.read | Listar usuarios |
+| POST | `/api/users` | users.manage | Crear usuario |
+| PATCH | `/api/users/:id` | users.manage | Editar nombre, rol y estado |
+| POST | `/api/users/:id/reset-password` | users.manage | Restablecer contraseña |
 | GET | `/api/customers` | any | Listar clientes |
 | POST | `/api/customers` | admin/operator | Crear cliente |
 | PUT | `/api/customers/:id` | admin/operator | Editar cliente |

@@ -18,6 +18,7 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   role          Role      @default(operator)
+  active        Boolean   @default(true)
 
   sessions      Session[]
   accounts      Account[]
@@ -417,6 +418,7 @@ model Setting {
 enum Role {
   admin
   operator
+  finance
   viewer
 }
 

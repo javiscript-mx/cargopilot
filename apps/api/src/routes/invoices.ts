@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { createCFDI, cancelCFDI, getCFDIPdf, getCFDIXml } from "../lib/facturama.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
@@ -67,7 +67,7 @@ export async function invoicesRoutes(app: FastifyInstance) {
   // Crear factura en borrador
   app.post(
     "/invoices",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("invoices.create") },
     async (request, reply) => {
       const body = CreateInvoiceSchema.safeParse(request.body)
       if (!body.success) {
@@ -117,7 +117,7 @@ export async function invoicesRoutes(app: FastifyInstance) {
   // Timbrar (stamping) con Facturama
   app.post(
     "/invoices/:id/stamp",
-    { preHandler: requireRole("admin", "operator") },
+    { preHandler: requirePermission("invoices.stamp") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
 
@@ -289,7 +289,7 @@ export async function invoicesRoutes(app: FastifyInstance) {
   // Cancelar factura
   app.post(
     "/invoices/:id/cancel",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("invoices.cancel") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       // Motivos SAT soportados sin folio de sustitución (el 01 requiere UUID

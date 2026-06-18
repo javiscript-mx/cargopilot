@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 // Categorías reconocidas — extensible sin cambiar schema
 export const CATALOG_CATEGORIES = [
@@ -57,7 +57,7 @@ export async function catalogRoutes(app: FastifyInstance) {
   // Alta nueva. Solo puede existir un activo por (category, code).
   app.post(
     "/catalog/items",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("catalog.manage") },
     async (request, reply) => {
       const body = CatalogItemSchema.safeParse(request.body)
       if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -79,7 +79,7 @@ export async function catalogRoutes(app: FastifyInstance) {
   // La categoría no cambia; código y nombre se toman del body o del registro previo.
   app.put(
     "/catalog/items/:id",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("catalog.manage") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const body = CatalogItemSchema.partial().safeParse(request.body)
@@ -122,7 +122,7 @@ export async function catalogRoutes(app: FastifyInstance) {
   // Activar / desactivar (baja lógica). No borra de la BD.
   app.patch(
     "/catalog/items/:id/active",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("catalog.manage") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const { active } = (request.body ?? {}) as { active?: boolean }
@@ -146,7 +146,7 @@ export async function catalogRoutes(app: FastifyInstance) {
   // "Eliminar" = baja lógica (nunca borrado físico).
   app.delete(
     "/catalog/items/:id",
-    { preHandler: requireRole("admin") },
+    { preHandler: requirePermission("catalog.manage") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const existing = await prisma.catalogItem.findUnique({ where: { id } })

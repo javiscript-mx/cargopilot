@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 // Partida de mercancía de un expediente — alimenta el nodo Mercancias de Carta Porte
 const MerchandiseSchema = z.object({
@@ -27,7 +27,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
     return reply.send(items)
   })
 
-  app.post("/merchandise", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.post("/merchandise", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const body = MerchandiseSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
     const shipment = await prisma.shipment.findUnique({ where: { id: body.data.shipmentId } })
@@ -49,7 +49,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
     return reply.status(201).send(item)
   })
 
-  app.put("/merchandise/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.put("/merchandise/:id", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const body = MerchandiseSchema.omit({ shipmentId: true }).partial().safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -70,7 +70,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
     return reply.send(item)
   })
 
-  app.delete("/merchandise/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.delete("/merchandise/:id", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.merchandise.delete({ where: { id } })
     return reply.status(204).send()

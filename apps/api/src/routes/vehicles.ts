@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 const VEHICLE_STATUSES = ["pending", "authorized", "suspended"] as const
 
@@ -38,7 +38,7 @@ export async function vehiclesRoutes(app: FastifyInstance) {
     return reply.send(vehicles)
   })
 
-  app.post("/vehicles", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.post("/vehicles", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const body = VehicleSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
     const supplier = await prisma.supplier.findUnique({ where: { id: body.data.supplierId } })
@@ -60,7 +60,7 @@ export async function vehiclesRoutes(app: FastifyInstance) {
     return reply.status(201).send(vehicle)
   })
 
-  app.put("/vehicles/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.put("/vehicles/:id", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const body = VehicleSchema.partial().safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -70,7 +70,7 @@ export async function vehiclesRoutes(app: FastifyInstance) {
   })
 
   // Cambiar estado de autorización (admin)
-  app.patch("/vehicles/:id/status", { preHandler: requireRole("admin") }, async (request, reply) => {
+  app.patch("/vehicles/:id/status", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const { status } = (request.body ?? {}) as { status?: string }
     if (!status || !VEHICLE_STATUSES.includes(status as (typeof VEHICLE_STATUSES)[number])) {
@@ -81,7 +81,7 @@ export async function vehiclesRoutes(app: FastifyInstance) {
   })
 
   // Baja lógica (conserva referencias históricas en expedientes)
-  app.delete("/vehicles/:id", { preHandler: requireRole("admin", "operator") }, async (request, reply) => {
+  app.delete("/vehicles/:id", { preHandler: requirePermission("suppliers.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.vehicle.update({ where: { id }, data: { active: false } })
     return reply.status(204).send()

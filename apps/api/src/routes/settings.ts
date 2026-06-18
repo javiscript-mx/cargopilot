@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { prisma } from "../db/client.js"
-import { requireAuth, requireRole } from "../middleware/require-auth.js"
+import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 
 // Default values used when a setting hasn't been saved yet
 export const SETTING_DEFAULTS: Record<string, unknown> = {
@@ -30,7 +30,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   // PATCH /api/settings — upserts one or more keys (admin only)
   app.patch(
     "/settings",
-    { preHandler: [requireAuth, requireRole("admin")] },
+    { preHandler: [requireAuth, requirePermission("settings.manage")] },
     async (request, reply) => {
       const parsed = PatchSettingsSchema.safeParse(request.body)
       if (!parsed.success) return reply.status(400).send({ error: "Body inválido" })

@@ -90,12 +90,17 @@ export async function suppliersRoutes(app: FastifyInstance) {
     },
   )
 
+  // Baja LÓGICA (active=false), no borrado físico: conserva el historial — el
+  // proveedor aparece como carrier en tramos/expedientes y tiene unidades/operadores
+  // referenciados (Carta Porte). Coherente con la baja de vehicles/operators.
   app.delete(
     "/suppliers/:id",
     { preHandler: requirePermission("suppliers.delete") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
-      await prisma.supplier.delete({ where: { id } })
+      const supplier = await prisma.supplier.findUnique({ where: { id }, select: { id: true } })
+      if (!supplier) return reply.status(404).send({ error: "Proveedor no encontrado" })
+      await prisma.supplier.update({ where: { id }, data: { active: false } })
       return reply.status(204).send()
     },
   )

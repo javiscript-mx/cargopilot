@@ -63,10 +63,20 @@ function SupplierDetailPage() {
     mutationFn: () => suppliersApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] })
-      toast.success("Proveedor eliminado", supplier?.name)
+      toast.success("Proveedor desactivado", supplier?.name)
       navigate({ to: "/suppliers" })
     },
-    onError: (err: Error) => toast.error("No se pudo eliminar el proveedor", err.message),
+    onError: (err: Error) => toast.error("No se pudo desactivar el proveedor", err.message),
+  })
+
+  const reactivateMutation = useMutation({
+    mutationFn: () => suppliersApi.update(id, { active: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] })
+      queryClient.invalidateQueries({ queryKey: ["suppliers", id] })
+      toast.success("Proveedor reactivado", supplier?.name)
+    },
+    onError: (err: Error) => toast.error("No se pudo reactivar el proveedor", err.message),
   })
 
   if (isLoading) {
@@ -117,18 +127,27 @@ function SupplierDetailPage() {
                 </Button>
               </Link>
             )}
-            {canDelete && (
+            {canDelete && (supplier.active ? (
               <Button
                 variant="outline" size="sm"
                 className="flex items-center gap-1.5 text-[--color-destructive] hover:bg-red-50"
                 loading={deleteMutation.isPending}
                 onClick={() => {
-                  if (confirm(`¿Eliminar proveedor "${supplier.name}"?`)) deleteMutation.mutate()
+                  if (confirm(`¿Desactivar proveedor "${supplier.name}"? Se conserva su historial.`)) deleteMutation.mutate()
                 }}
               >
-                <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                <Trash2 className="h-3.5 w-3.5" /> Desactivar
               </Button>
-            )}
+            ) : (
+              <Button
+                variant="outline" size="sm"
+                className="flex items-center gap-1.5"
+                loading={reactivateMutation.isPending}
+                onClick={() => reactivateMutation.mutate()}
+              >
+                Reactivar
+              </Button>
+            ))}
           </div>
         </div>
       </div>

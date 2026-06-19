@@ -306,8 +306,13 @@ model Merchandise {
   containerId String?
   container   Container? @relation(fields: [containerId], references: [id], onDelete: SetNull)
 
+  // Asignación opcional a un tramo (qué unidad la transporta) — Carta Porte por tramo
+  legId       String?
+  leg         ShipmentLeg? @relation(fields: [legId], references: [id], onDelete: SetNull)
+
   @@index([shipmentId])
   @@index([containerId])
+  @@index([legId])
   @@map("merchandise")
 }
 
@@ -475,7 +480,8 @@ model ShipmentLeg {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  tasks LegTask[]
+  tasks       LegTask[]
+  merchandise Merchandise[]
 
   @@index([shipmentId])
   @@map("shipment_legs")

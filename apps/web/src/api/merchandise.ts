@@ -13,6 +13,7 @@ export interface Merchandise {
   productKey: string | null // catálogo sat_product_key
   hsCode: string | null    // FraccionArancelaria
   containerId: string | null // contenedor asignado (opcional)
+  legId: string | null       // tramo asignado (Carta Porte por tramo)
   notes: string | null
   createdAt: string
 }
@@ -27,6 +28,7 @@ export interface MerchandiseInput {
   productKey?: string | null
   hsCode?: string | null
   containerId?: string | null
+  legId?: string | null
   notes?: string | null
 }
 

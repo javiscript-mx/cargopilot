@@ -8,6 +8,7 @@ import { SatPicker, type PickerItem } from "@/components/ui/sat-picker"
 import { Button } from "@/components/ui/button"
 import { merchandiseApi, type Merchandise } from "@/api/merchandise"
 import { containersApi } from "@/api/containers"
+import { processApi } from "@/api/process"
 import { satApi } from "@/api/sat"
 import { useToast } from "@/components/ui/toast"
 
@@ -26,7 +27,7 @@ const resolveUnitKey = async (code: string): Promise<PickerItem | null> => {
 }
 
 const EMPTY = {
-  description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", notes: "",
+  description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", legId: "", notes: "",
 }
 
 export function MerchandiseBlock({
@@ -43,6 +44,17 @@ export function MerchandiseBlock({
     queryFn: () => containersApi.list(shipmentId),
     enabled: contenerizada,
   })
+  // Tramos del proceso (para asignar qué unidad transporta la mercancía — Carta Porte)
+  const { data: process } = useQuery({
+    queryKey: ["process", shipmentId],
+    queryFn: () => processApi.get(shipmentId),
+  })
+  const legs = process?.legs ?? []
+  const legLabel = (legId: string | null) => {
+    if (!legId) return null
+    const i = legs.findIndex((l) => l.id === legId)
+    return i >= 0 ? `Tramo ${i + 1} (${legs[i]!.scope === "foraneo" ? "foráneo" : "local"})` : null
+  }
 
   const [show, setShow] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -62,6 +74,7 @@ export function MerchandiseBlock({
         productKey: form.productKey || null,
         hsCode: form.hsCode || null,
         containerId: form.containerId || null,
+        legId: form.legId || null,
         notes: form.notes || null,
       }
       return editingId ? merchandiseApi.update(editingId, payload) : merchandiseApi.create({ shipmentId, ...payload })
@@ -85,7 +98,7 @@ export function MerchandiseBlock({
     setForm({
       description: m.description, quantity: m.quantity ?? "", unitKey: m.unitKey ?? "",
       weight: m.weight ?? "", value: m.value ?? "", productKey: m.productKey ?? "",
-      hsCode: m.hsCode ?? "", containerId: m.containerId ?? "", notes: m.notes ?? "",
+      hsCode: m.hsCode ?? "", containerId: m.containerId ?? "", legId: m.legId ?? "", notes: m.notes ?? "",
     })
     setError(""); setShow(true)
   }
@@ -119,6 +132,7 @@ export function MerchandiseBlock({
           {m.weight && <span>{fmt(m.weight)} kg</span>}
           {m.value && <span>${fmt(m.value)}</span>}
           {m.hsCode && <span>Fracción: {m.hsCode}</span>}
+          {legLabel(m.legId) && <span className="text-[--color-primary]">{legLabel(m.legId)}</span>}
         </div>
       </div>
       {canEdit && (
@@ -191,6 +205,14 @@ export function MerchandiseBlock({
                 placeholder="Sin asignar"
                 options={containers.map((c) => ({ value: c.id, label: c.number }))}
                 value={form.containerId} onChange={set("containerId")}
+              />
+            )}
+            {legs.length > 0 && (
+              <Select
+                id="legId" label="Tramo / unidad (opcional)"
+                placeholder="Sin asignar"
+                options={legs.map((l, i) => ({ value: l.id, label: `Tramo ${i + 1} (${l.scope === "foraneo" ? "foráneo" : "local"})` }))}
+                value={form.legId} onChange={set("legId")}
               />
             )}
             <Input id="notes" label="Notas (opcional)" value={form.notes} onChange={set("notes")} />

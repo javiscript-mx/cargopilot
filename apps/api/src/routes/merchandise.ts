@@ -14,6 +14,7 @@ const MerchandiseSchema = z.object({
   productKey: z.string().nullish(), // catálogo sat_product_key (ClaveProdServCP)
   hsCode: z.string().nullish(),     // FraccionArancelaria
   containerId: z.string().cuid().nullish(), // asignación opcional a contenedor
+  legId: z.string().cuid().nullish(),       // asignación opcional a tramo (Carta Porte)
   notes: z.string().nullish(),
 })
 
@@ -43,6 +44,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
         productKey: body.data.productKey ?? null,
         hsCode: body.data.hsCode ?? null,
         containerId: body.data.containerId ?? null,
+        legId: body.data.legId ?? null,
         notes: body.data.notes ?? null,
       },
     })
@@ -64,6 +66,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
         productKey: body.data.productKey ?? null,
         hsCode: body.data.hsCode ?? null,
         containerId: body.data.containerId ?? null,
+        legId: body.data.legId ?? null,
         notes: body.data.notes ?? null,
       },
     })

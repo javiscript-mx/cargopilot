@@ -5,6 +5,7 @@ import { prisma } from "../db/client.js"
 import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
+import { instantiateWorkflow } from "../lib/workflow.js"
 
 const ShipmentSchema = z.object({
   customerId: z.string().cuid(),
@@ -124,6 +125,23 @@ export async function shipmentsRoutes(app: FastifyInstance) {
           include: { customer: { select: { id: true, name: true } } },
         }),
       )
+
+      // Auto-aplica el proceso si hay EXACTAMENTE un workflow activo para este tipo
+      // de operación (p. ej. flete terrestre). Nunca bloquea el alta si algo falla.
+      try {
+        const templates = await prisma.workflowTemplate.findMany({
+          where: { active: true, operationType: shipment.operationType },
+          select: { code: true, name: true },
+        })
+        if (templates.length === 1 && templates[0]) {
+          await instantiateWorkflow(shipment.id, templates[0].code)
+          await prisma.shipmentEvent.create({
+            data: { shipmentId: shipment.id, type: "note", title: `Proceso aplicado: ${templates[0].name}`, createdBy: userId },
+          })
+        }
+      } catch (err) {
+        request.log.error({ err }, "No se pudo auto-aplicar el workflow al expediente")
+      }
 
       return reply.status(201).send(shipment)
     },

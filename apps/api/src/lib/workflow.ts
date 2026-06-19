@@ -54,14 +54,17 @@ export async function addLeg(
     include: { tasks: { orderBy: { order: "asc" } } },
   })
 
-  const count = await prisma.shipmentLeg.count({ where: { shipmentId } })
+  // order = MÁXIMO + 1 (no count): tras borrar un tramo, count colisionaría con
+  // un order existente. Mismo patrón que folios (ver lib/folio.ts).
+  const existing = await prisma.shipmentLeg.findMany({ where: { shipmentId }, select: { order: true } })
+  const nextOrder = existing.reduce((m, l) => Math.max(m, l.order), 0) + 1
   const tasks = (template?.tasks ?? []).filter((t) => t.scope === "any" || t.scope === opts.scope)
 
   return prisma.shipmentLeg.create({
     data: {
       shipmentId,
       legTemplateId: template?.id ?? null,
-      order: count + 1,
+      order: nextOrder,
       scope: opts.scope,
       tasks: {
         create: tasks.map((t) => ({

@@ -162,10 +162,10 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
             </h4>
             {canEdit && (
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending} onClick={() => addLegMutation.mutate("local")}>
+                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending && addLegMutation.variables === "local"} onClick={() => addLegMutation.mutate("local")}>
                   <Plus className="h-3.5 w-3.5" /> Local
                 </Button>
-                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending} onClick={() => addLegMutation.mutate("foraneo")}>
+                <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending && addLegMutation.variables === "foraneo"} onClick={() => addLegMutation.mutate("foraneo")}>
                   <Plus className="h-3.5 w-3.5" /> Foráneo
                 </Button>
               </div>
@@ -178,14 +178,16 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
             </p>
           ) : (
             <div className="flex flex-col gap-3">
-              {process!.legs.map((leg) => {
+              {process!.legs.map((leg, idx) => {
                 const done = leg.tasks.filter((t) => t.status === "done").length
+                const num = idx + 1
+                const carrier = [leg.carrierName, leg.vehicleLabel, leg.operatorName].filter(Boolean).join(" · ")
                 return (
                   <div key={leg.id} className="rounded-md border border-[--color-border]">
                     <div className="flex items-center justify-between gap-2 border-b border-[--color-border] bg-[--color-muted]/40 px-3 py-2">
                       <div className="flex min-w-0 flex-col gap-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">Tramo {leg.order}</span>
+                          <span className="text-sm font-semibold">Tramo {num}</span>
                           <Badge variant={leg.scope === "foraneo" ? "default" : "outline"}>
                             {leg.scope === "foraneo" ? "Foráneo · Carta Porte" : "Local"}
                           </Badge>
@@ -194,6 +196,11 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
                         {legRoute(leg) && (
                           <span className="flex items-center gap-1 truncate text-xs text-[--color-muted-foreground]">
                             <MapPin className="h-3 w-3 shrink-0" /> {legRoute(leg)}
+                          </span>
+                        )}
+                        {carrier && (
+                          <span className="flex items-center gap-1 truncate text-xs text-[--color-muted-foreground]">
+                            <Truck className="h-3 w-3 shrink-0" /> {carrier}
                           </span>
                         )}
                       </div>
@@ -208,7 +215,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
                           </button>
                           <button
                             title="Eliminar tramo"
-                            onClick={() => { if (confirm(`¿Eliminar el tramo ${leg.order}?`)) deleteLegMutation.mutate(leg.id) }}
+                            onClick={() => { if (confirm(`¿Eliminar el tramo ${num}?`)) deleteLegMutation.mutate(leg.id) }}
                             className="rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />

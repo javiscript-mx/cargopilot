@@ -98,7 +98,27 @@ export async function processRoutes(app: FastifyInstance) {
         include: { tasks: { orderBy: { order: "asc" } } },
       }),
     ])
-    return reply.send({ workflowTemplateId: shipment.workflowTemplateId, stages, legs })
+
+    // Resuelve nombres de transportista/unidad/operador (soft refs) en lote para
+    // mostrarlos en cada tramo sin queries por fila en el cliente.
+    const ids = (key: "carrierSupplierId" | "vehicleId" | "operatorId") =>
+      [...new Set(legs.map((l) => l[key]).filter((v): v is string => Boolean(v)))]
+    const [sups, vehs, ops] = await Promise.all([
+      prisma.supplier.findMany({ where: { id: { in: ids("carrierSupplierId") } }, select: { id: true, name: true } }),
+      prisma.vehicle.findMany({ where: { id: { in: ids("vehicleId") } }, select: { id: true, plates: true, economicNumber: true } }),
+      prisma.operator.findMany({ where: { id: { in: ids("operatorId") } }, select: { id: true, name: true } }),
+    ])
+    const supMap = new Map(sups.map((s) => [s.id, s.name]))
+    const vehMap = new Map(vehs.map((v) => [v.id, v.economicNumber ? `${v.plates} · ${v.economicNumber}` : v.plates]))
+    const opMap = new Map(ops.map((o) => [o.id, o.name]))
+    const legsEnriched = legs.map((l) => ({
+      ...l,
+      carrierName: l.carrierSupplierId ? supMap.get(l.carrierSupplierId) ?? null : null,
+      vehicleLabel: l.vehicleId ? vehMap.get(l.vehicleId) ?? null : null,
+      operatorName: l.operatorId ? opMap.get(l.operatorId) ?? null : null,
+    }))
+
+    return reply.send({ workflowTemplateId: shipment.workflowTemplateId, stages, legs: legsEnriched })
   })
 
   // Aplica (instancia) una plantilla de workflow al expediente — copia-snapshot
@@ -138,7 +158,7 @@ export async function processRoutes(app: FastifyInstance) {
     if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
 
     const leg = await addLeg(id, { scope: body.data.scope, ...(body.data.legTemplateCode ? { legTemplateCode: body.data.legTemplateCode } : {}) })
-    await logEvent(id, "note", `Tramo ${leg.order} (${body.data.scope === "local" ? "local" : "foráneo"}) agregado`, request.session?.user.id ?? null)
+    await logEvent(id, "note", `Tramo ${body.data.scope === "local" ? "local" : "foráneo"} agregado`, request.session?.user.id ?? null)
     return reply.status(201).send(leg)
   })
 

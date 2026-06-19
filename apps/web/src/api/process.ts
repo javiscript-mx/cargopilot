@@ -47,6 +47,10 @@ export interface ProcessLeg {
   cartaPorteInvoiceId: string | null
   notes: string | null
   tasks: ProcessTask[]
+  // Nombres resueltos en el API (soft refs) para mostrar sin queries extra
+  carrierName: string | null
+  vehicleLabel: string | null
+  operatorName: string | null
 }
 
 export interface ShipmentProcess {

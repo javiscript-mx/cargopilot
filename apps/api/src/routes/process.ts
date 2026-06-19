@@ -203,7 +203,7 @@ export async function processRoutes(app: FastifyInstance) {
 
   // ── Tareas (de fase y de tramo) ─────────────────────────────────────────────
 
-  app.patch("/shipment-tasks/:taskId", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
+  app.patch("/shipment-tasks/:taskId", { preHandler: requirePermission("shipments.advanceTask") }, async (request, reply) => {
     const { taskId } = request.params as { taskId: string }
     const body = TaskUpdateSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
@@ -219,7 +219,7 @@ export async function processRoutes(app: FastifyInstance) {
     return reply.send(task)
   })
 
-  app.patch("/leg-tasks/:taskId", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
+  app.patch("/leg-tasks/:taskId", { preHandler: requirePermission("shipments.advanceTask") }, async (request, reply) => {
     const { taskId } = request.params as { taskId: string }
     const body = TaskUpdateSchema.safeParse(request.body)
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })

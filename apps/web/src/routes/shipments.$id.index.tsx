@@ -204,7 +204,7 @@ function ShipmentDetailPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         {/* ── Columna principal: proceso + bitácora ── */}
         <div className="flex flex-col gap-4 lg:col-span-2">
-          <ProcessSection shipmentId={id} canEdit={canEdit} />
+          <ProcessSection shipmentId={id} />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">

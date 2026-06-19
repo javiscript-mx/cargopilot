@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   "shipments.write",
   "shipments.changeStatus",
   "shipments.delete",
+  "shipments.advanceTask",
   // Facturación (CFDI)
   "invoices.read",
   "invoices.create",
@@ -55,6 +56,7 @@ export const PERMISSION_META: Record<Permission, PermissionMeta> = {
   "shipments.write": { module: "Expedientes", label: "Editar expedientes", description: "Crear y modificar expedientes, carga, contenedores y bitácora" },
   "shipments.changeStatus": { module: "Expedientes", label: "Cambiar estado", description: "Avanzar o cancelar el estado de un expediente" },
   "shipments.delete": { module: "Expedientes", label: "Eliminar de expedientes", description: "Eliminar eventos de bitácora y sub-recursos del expediente" },
+  "shipments.advanceTask": { module: "Expedientes", label: "Avanzar tareas del proceso", description: "Marcar tareas/hitos del workflow (incluye el timbrado a cargo de Facturación)" },
   "invoices.read": { module: "Facturación", label: "Ver facturas", description: "Consultar facturas y descargar PDF/XML" },
   "invoices.create": { module: "Facturación", label: "Crear borradores", description: "Crear borradores de factura (sin timbrar)" },
   "invoices.stamp": { module: "Facturación", label: "Timbrar CFDI", description: "Timbrar facturas ante el SAT vía Facturama" },
@@ -93,15 +95,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Operaciones: ciclo completo de expedientes/clientes/proveedores + borradores de factura
   operator: [
     "customers.read", "customers.write",
-    "shipments.read", "shipments.write", "shipments.changeStatus", "shipments.delete",
+    "shipments.read", "shipments.write", "shipments.changeStatus", "shipments.delete", "shipments.advanceTask",
     "invoices.read", "invoices.create",
     "suppliers.read", "suppliers.write",
     "documents.write",
   ],
-  // Facturación/Finanzas: control de facturación de punta a punta + edición comercial del cliente
+  // Facturación/Finanzas: control de facturación de punta a punta + edición comercial del cliente.
+  // Puede avanzar tareas del proceso (su tarea de timbrado Carta Porte) sin editar el resto del expediente.
   finance: [
     "customers.read", "customers.write",
-    "shipments.read",
+    "shipments.read", "shipments.advanceTask",
     "invoices.read", "invoices.create", "invoices.stamp", "invoices.cancel",
     "suppliers.read",
     "documents.write",

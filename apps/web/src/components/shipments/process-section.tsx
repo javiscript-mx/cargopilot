@@ -6,12 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/toast"
+import { useCan } from "@/lib/permissions"
 import { LegDrawer } from "@/components/shipments/leg-drawer"
+import { TaskDrawer } from "@/components/shipments/task-drawer"
 import { processApi, type ProcessTask, type ProcessLeg, type LegScope, type LegLocation } from "@/api/process"
 
-export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; canEdit: boolean }) {
+export function ProcessSection({ shipmentId }: { shipmentId: string }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  // Gestionar (aplicar proceso, tramos) = operaciones; avanzar tareas = también finanzas
+  const { can } = useCan()
+  const canManage = can("shipments.write")
+  const canAdvance = can("shipments.advanceTask")
 
   const { data: process, isLoading } = useQuery({
     queryKey: ["process", shipmentId],
@@ -22,10 +28,11 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
   const { data: templates = [] } = useQuery({
     queryKey: ["workflow-templates"],
     queryFn: () => processApi.templates(),
-    enabled: canEdit && !hasProcess,
+    enabled: canManage && !hasProcess,
   })
   const [templateCode, setTemplateCode] = useState("")
   const [editingLeg, setEditingLeg] = useState<ProcessLeg | null>(null)
+  const [editingTask, setEditingTask] = useState<{ task: ProcessTask; isLeg: boolean } | null>(null)
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["process", shipmentId] })
@@ -77,7 +84,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {!canEdit ? (
+          {!canManage ? (
             <p className="text-sm text-[--color-muted-foreground]">Este expediente no tiene un proceso aplicado.</p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -146,7 +153,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
               </div>
               <div className="flex flex-col divide-y divide-[--color-border] rounded-md border border-[--color-border]">
                 {stage.tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} canEdit={canEdit} onToggle={() => toggleTask(task, false)} />
+                  <TaskRow key={task.id} task={task} canAdvance={canAdvance} onToggle={() => toggleTask(task, false)} onEdit={() => setEditingTask({ task, isLeg: false })} />
                 ))}
               </div>
             </div>
@@ -160,7 +167,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
               <Truck className="h-4 w-4 text-[--color-muted-foreground]" /> Tramos
               <span className="font-normal text-[--color-muted-foreground]">({process!.legs.length})</span>
             </h4>
-            {canEdit && (
+            {canManage && (
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="flex items-center gap-1.5" loading={addLegMutation.isPending && addLegMutation.variables === "local"} onClick={() => addLegMutation.mutate("local")}>
                   <Plus className="h-3.5 w-3.5" /> Local
@@ -204,7 +211,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
                           </span>
                         )}
                       </div>
-                      {canEdit && (
+                      {canManage && (
                         <div className="flex shrink-0 items-center gap-1">
                           <button
                             title="Editar tramo"
@@ -225,7 +232,7 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
                     </div>
                     <div className="flex flex-col divide-y divide-[--color-border]">
                       {leg.tasks.map((task) => (
-                        <TaskRow key={task.id} task={task} canEdit={canEdit} onToggle={() => toggleTask(task, true)} />
+                        <TaskRow key={task.id} task={task} canAdvance={canAdvance} onToggle={() => toggleTask(task, true)} onEdit={() => setEditingTask({ task, isLeg: true })} />
                       ))}
                     </div>
                   </div>
@@ -238,6 +245,9 @@ export function ProcessSection({ shipmentId, canEdit }: { shipmentId: string; ca
     </Card>
     {editingLeg && (
       <LegDrawer open onClose={() => setEditingLeg(null)} shipmentId={shipmentId} leg={editingLeg} />
+    )}
+    {editingTask && (
+      <TaskDrawer open onClose={() => setEditingTask(null)} shipmentId={shipmentId} task={editingTask.task} isLeg={editingTask.isLeg} />
     )}
     </>
   )
@@ -252,31 +262,50 @@ function legRoute(leg: ProcessLeg): string | null {
   return `${from ?? "—"} → ${to ?? "—"}`
 }
 
-function TaskRow({ task, canEdit, onToggle }: { task: ProcessTask; canEdit: boolean; onToggle: () => void }) {
+const STATUS_BADGE: Record<string, string> = {
+  in_progress: "En progreso",
+  blocked: "Bloqueada",
+  skipped: "Omitida",
+}
+
+function TaskRow({ task, canAdvance, onToggle, onEdit }: { task: ProcessTask; canAdvance: boolean; onToggle: () => void; onEdit: () => void }) {
   const done = task.status === "done"
+  const muted = done || task.status === "skipped"
+  const badge = STATUS_BADGE[task.status]
   return (
     <div className="flex items-start gap-2.5 px-3 py-2">
       <button
         onClick={onToggle}
-        disabled={!canEdit}
+        disabled={!canAdvance}
         title={done ? "Marcar pendiente" : "Marcar completada"}
         className="mt-0.5 shrink-0 disabled:cursor-default"
       >
         {done
           ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-          : <Circle className="h-4 w-4 text-[--color-muted-foreground]" />}
+          : <Circle className={task.status === "in_progress" ? "h-4 w-4 text-[--color-primary]" : "h-4 w-4 text-[--color-muted-foreground]"} />}
       </button>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className={done ? "text-sm text-[--color-muted-foreground] line-through" : "text-sm"}>{task.name}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={muted ? "text-sm text-[--color-muted-foreground] line-through" : "text-sm"}>{task.name}</span>
           {task.isMilestone && <Star className="h-3 w-3 shrink-0 text-amber-500" aria-label="Hito" />}
+          {badge && <span className="rounded-full bg-[--color-muted] px-1.5 py-0.5 text-[10px] font-medium text-[--color-muted-foreground]">{badge}</span>}
         </div>
-        {done && task.actualAt && (
+        {(done || task.actualAt) && task.actualAt && (
           <p className="mt-0.5 text-xs text-[--color-muted-foreground]">
             {new Date(task.actualAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
           </p>
         )}
+        {task.notes && <p className="mt-0.5 truncate text-xs text-[--color-muted-foreground]">{task.notes}</p>}
       </div>
+      {canAdvance && (
+        <button
+          title="Editar tarea"
+          onClick={onEdit}
+          className="mt-0.5 shrink-0 rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      )}
     </div>
   )
 }

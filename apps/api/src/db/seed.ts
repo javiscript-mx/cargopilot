@@ -185,18 +185,20 @@ async function main() {
     console.log("✓ Usuario admin creado: admin@hmsistema.mx")
   }
 
-  // Cliente de prueba
-  let customer = await prisma.customer.findFirst({ where: { rfc: "XAXX010101000" } })
-  if (!customer) {
-    customer = await prisma.customer.create({
-      data: {
-      name: "Cliente de Prueba SA de CV",
-      rfc: "XAXX010101000",
-      email: "prueba@ejemplo.com",
-      },
-    })
+  // Cliente de prueba — SOLO fuera de producción (no ensuciar el padrón real)
+  if (process.env["NODE_ENV"] !== "production") {
+    let customer = await prisma.customer.findFirst({ where: { rfc: "XAXX010101000" } })
+    if (!customer) {
+      customer = await prisma.customer.create({
+        data: {
+          name: "Cliente de Prueba SA de CV",
+          rfc: "XAXX010101000",
+          email: "prueba@ejemplo.com",
+        },
+      })
+    }
+    console.log(`✓ Cliente de prueba: ${customer.name}`)
   }
-  console.log(`✓ Cliente de prueba: ${customer.name}`)
 
   // Catálogos default — crea solo si no existe un activo con ese (category, code).
   // (Ya no hay unique compuesto: la unicidad es parcial entre activos.)

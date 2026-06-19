@@ -22,6 +22,22 @@ import { processRoutes } from "./routes/process.js"
 
 const isDev = process.env["NODE_ENV"] === "development"
 
+// ─── Guard de entorno: en producción no arrancar con secretos faltantes/débiles.
+// Sin BETTER_AUTH_SECRET, better-auth genera uno aleatorio por proceso → cierra
+// la sesión de todos en cada reinicio/deploy. DATABASE_URL es obligatorio.
+if (!isDev) {
+  const problems: string[] = []
+  const secret = process.env["BETTER_AUTH_SECRET"] ?? ""
+  if (!process.env["DATABASE_URL"]) problems.push("DATABASE_URL no está definido")
+  if (secret.length < 32) problems.push("BETTER_AUTH_SECRET debe tener al menos 32 caracteres")
+  if (!process.env["BETTER_AUTH_URL"]) problems.push("BETTER_AUTH_URL no está definido")
+  if (!process.env["CORS_ORIGIN"]) problems.push("CORS_ORIGIN no está definido")
+  if (problems.length) {
+    console.error("✖ Configuración de producción incompleta:\n  - " + problems.join("\n  - "))
+    process.exit(1)
+  }
+}
+
 const app = Fastify({
   logger: isDev
     ? { level: process.env["LOG_LEVEL"] ?? "info", transport: { target: "pino-pretty", options: { colorize: true } } }

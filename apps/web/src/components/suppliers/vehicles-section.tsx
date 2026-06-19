@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { vehiclesApi, VEHICLE_STATUS_LABELS, type VehicleStatus } from "@/api/vehicles"
 import { useCatalog } from "@/hooks/use-catalog"
-import { useSession } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
 
 const EMPTY = {
@@ -22,8 +22,8 @@ const SEARCH_THRESHOLD = 5
 export function VehiclesSection({ supplierId }: { supplierId: string }) {
   const queryClient = useQueryClient()
   const toast = useToast()
-  const { data: session } = useSession()
-  const isAdmin = (session?.user as { role?: string })?.role === "admin"
+  const { can } = useCan()
+  const canManage = can("suppliers.write")
 
   const { data: vehicles = [] } = useQuery({
     queryKey: ["vehicles", supplierId],
@@ -112,9 +112,11 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
             {vehicles.length} {vehicles.length === 1 ? "unidad registrada" : "unidades registradas"}
           </span>
         )}
-        <Button size="sm" className="flex items-center gap-1.5" onClick={() => { setShow(true); setError("") }}>
-          <Plus className="h-3.5 w-3.5" /> Agregar unidad
-        </Button>
+        {canManage && (
+          <Button size="sm" className="flex items-center gap-1.5" onClick={() => { setShow(true); setError("") }}>
+            <Plus className="h-3.5 w-3.5" /> Agregar unidad
+          </Button>
+        )}
       </div>
 
       <Drawer
@@ -166,27 +168,29 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
                     {v.insurer && <span>{v.insurer}</span>}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {isAdmin && v.status !== "authorized" && (
-                    <Button size="sm" variant="outline" loading={statusMutation.isPending}
-                      onClick={() => statusMutation.mutate({ id: v.id, status: "authorized" })}>
-                      Autorizar
-                    </Button>
-                  )}
-                  {isAdmin && v.status === "authorized" && (
-                    <Button size="sm" variant="outline"
-                      onClick={() => statusMutation.mutate({ id: v.id, status: "suspended" })}>
-                      Suspender
-                    </Button>
-                  )}
-                  <button
-                    title="Dar de baja"
-                    onClick={() => { if (confirm(`¿Dar de baja la unidad ${v.plates}?`)) deleteMutation.mutate(v.id) }}
-                    className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {v.status !== "authorized" && (
+                      <Button size="sm" variant="outline" loading={statusMutation.isPending}
+                        onClick={() => statusMutation.mutate({ id: v.id, status: "authorized" })}>
+                        Autorizar
+                      </Button>
+                    )}
+                    {v.status === "authorized" && (
+                      <Button size="sm" variant="outline"
+                        onClick={() => statusMutation.mutate({ id: v.id, status: "suspended" })}>
+                        Suspender
+                      </Button>
+                    )}
+                    <button
+                      title="Dar de baja"
+                      onClick={() => { if (confirm(`¿Dar de baja la unidad ${v.plates}?`)) deleteMutation.mutate(v.id) }}
+                      className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}

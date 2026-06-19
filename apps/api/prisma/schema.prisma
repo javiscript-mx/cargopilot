@@ -207,6 +207,7 @@ model ShipmentEvent {
   shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   type       String   // status_change | milestone | note
+  source     String   @default("manual") // manual (nota del usuario) | system (auto: estado/hito del proceso)
   title      String
   detail     String?
   occurredAt DateTime @default(now()) // cuándo sucedió realmente (permite registro retroactivo)

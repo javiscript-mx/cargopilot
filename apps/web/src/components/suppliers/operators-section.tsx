@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { operatorsApi, OPERATOR_STATUS_LABELS, type OperatorStatus } from "@/api/operators"
-import { useSession } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
 
 const EMPTY = { name: "", rfc: "", licenseNumber: "" }
@@ -17,8 +17,8 @@ const SEARCH_THRESHOLD = 5
 export function OperatorsSection({ supplierId }: { supplierId: string }) {
   const queryClient = useQueryClient()
   const toast = useToast()
-  const { data: session } = useSession()
-  const isAdmin = (session?.user as { role?: string })?.role === "admin"
+  const { can } = useCan()
+  const canManage = can("suppliers.write")
 
   const { data: operators = [] } = useQuery({
     queryKey: ["operators", supplierId],

@@ -15,6 +15,7 @@ export const STATUS_CONFIG: Record<ShipmentStatus, { label: string; variant: "de
 export interface ShipmentEvent {
   id: string
   type: "status_change" | "milestone" | "note"
+  source: "manual" | "system"
   title: string
   detail: string | null
   occurredAt: string

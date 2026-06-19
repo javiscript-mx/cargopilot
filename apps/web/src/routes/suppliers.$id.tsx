@@ -15,7 +15,7 @@ import { vehiclesApi } from "@/api/vehicles"
 import { operatorsApi } from "@/api/operators"
 import { documentsApi } from "@/api/documents"
 import { useCatalog } from "@/hooks/use-catalog"
-import { useSession } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/suppliers/$id")({
@@ -27,9 +27,9 @@ function SupplierDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
-  const { data: session } = useSession()
-  const role = (session?.user as { role?: string })?.role
-  const isAdmin = role === "admin"
+  const { can } = useCan()
+  const canWrite = can("suppliers.write")
+  const canDelete = can("suppliers.delete")
 
   const { data: supplier, isLoading } = useQuery({
     queryKey: ["suppliers", id],
@@ -110,12 +110,14 @@ function SupplierDetailPage() {
             {!supplier.active && <Badge variant="outline">Inactivo</Badge>}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/suppliers/$id/edit" params={{ id }}>
-              <Button variant="outline" size="sm" className="flex items-center gap-1.5">
-                <Pencil className="h-3.5 w-3.5" /> Editar
-              </Button>
-            </Link>
-            {isAdmin && (
+            {canWrite && (
+              <Link to="/suppliers/$id/edit" params={{ id }}>
+                <Button variant="outline" size="sm" className="flex items-center gap-1.5">
+                  <Pencil className="h-3.5 w-3.5" /> Editar
+                </Button>
+              </Link>
+            )}
+            {canDelete && (
               <Button
                 variant="outline" size="sm"
                 className="flex items-center gap-1.5 text-[--color-destructive] hover:bg-red-50"

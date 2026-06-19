@@ -13,7 +13,7 @@ import { CargoSection } from "@/components/shipments/cargo-section"
 import { ProcessSection } from "@/components/shipments/process-section"
 import { shipmentsApi, STATUS_CONFIG, type ShipmentStatus, type ShipmentEvent } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
-import { useSession } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/shipments/$id/")({
@@ -53,9 +53,11 @@ function ShipmentDetailPage() {
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
   const toast = useToast()
-  const { data: session } = useSession()
-  const role = (session?.user as { role?: string })?.role
-  const canEdit = role === "admin" || role === "operator"
+  const { can } = useCan()
+  const canEdit = can("shipments.write")
+  const canChangeStatus = can("shipments.changeStatus")
+  const canDelete = can("shipments.delete")
+  const canWriteDocuments = can("documents.write")
 
   const { data: shipment, isLoading } = useQuery({
     queryKey: ["shipments", id],
@@ -175,14 +177,16 @@ function ShipmentDetailPage() {
             <Badge variant={status.variant}>{status.label}</Badge>
             <span className="text-sm text-[--color-muted-foreground]">{operationLabel}</span>
           </div>
-          {canEdit && (
+          {(canEdit || canChangeStatus) && (
             <div className="flex flex-wrap gap-2">
-              <Link to="/shipments/$id/edit" params={{ id }}>
-                <Button variant="outline" size="sm" className="flex items-center gap-1.5">
-                  <Pencil className="h-3.5 w-3.5" /> Editar
-                </Button>
-              </Link>
-              {nextStatuses.map((next) => (
+              {canEdit && (
+                <Link to="/shipments/$id/edit" params={{ id }}>
+                  <Button variant="outline" size="sm" className="flex items-center gap-1.5">
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </Button>
+                </Link>
+              )}
+              {canChangeStatus && nextStatuses.map((next) => (
                 <Button
                   key={next}
                   variant={next === "cancelled" ? "destructive" : "default"}
@@ -313,7 +317,7 @@ function ShipmentDetailPage() {
                               <span className="whitespace-nowrap text-xs text-[--color-muted-foreground]">
                                 {formatDateTime(event.occurredAt)}
                               </span>
-                              {role === "admin" && event.type !== "status_change" && (
+                              {canDelete && event.source !== "system" && (
                                 <button
                                   title="Eliminar evento"
                                   onClick={() => {
@@ -340,7 +344,7 @@ function ShipmentDetailPage() {
 
           <CargoSection shipmentId={id} cargoType={shipment.cargoType} canEdit={canEdit} />
 
-          <DocumentsSection entityType="shipment" entityId={id} readOnly={!canEdit} />
+          <DocumentsSection entityType="shipment" entityId={id} readOnly={!canWriteDocuments} />
         </div>
 
         {/* ── Columna lateral: detalles ── */}

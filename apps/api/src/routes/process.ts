@@ -37,9 +37,11 @@ const LegUpdateSchema = z.object({
 const toDate = (v: string | null | undefined): Date | null | undefined =>
   v === undefined ? undefined : v === null ? null : new Date(v)
 
-async function logEvent(shipmentId: string, type: string, title: string, userId: string | null, occurredAt?: Date) {
+// Eventos del proceso = automáticos (source "system"): NO editables a mano y solo
+// se registran los hitos (la bitácora es timeline, no eco del checklist).
+async function logMilestone(shipmentId: string, title: string, userId: string | null, occurredAt?: Date) {
   await prisma.shipmentEvent.create({
-    data: { shipmentId, type, title, occurredAt: occurredAt ?? new Date(), createdBy: userId },
+    data: { shipmentId, type: "milestone", source: "system", title, occurredAt: occurredAt ?? new Date(), createdBy: userId },
   })
 }
 
@@ -135,7 +137,6 @@ export async function processRoutes(app: FastifyInstance) {
     if (!template) return reply.status(404).send({ error: "Plantilla no encontrada" })
 
     await instantiateWorkflow(id, body.data.templateCode)
-    await logEvent(id, "note", `Proceso aplicado: ${template.name}`, request.session?.user.id ?? null)
 
     const stages = await prisma.shipmentStage.findMany({
       where: { shipmentId: id },
@@ -159,7 +160,6 @@ export async function processRoutes(app: FastifyInstance) {
     if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
 
     const leg = await addLeg(id, { scope: body.data.scope, ...(body.data.legTemplateCode ? { legTemplateCode: body.data.legTemplateCode } : {}) })
-    await logEvent(id, "note", `Tramo ${body.data.scope === "local" ? "local" : "foráneo"} agregado`, request.session?.user.id ?? null)
     return reply.status(201).send(leg)
   })
 
@@ -220,8 +220,8 @@ export async function processRoutes(app: FastifyInstance) {
 
     const { data, becameDone } = buildTaskUpdate(existing, body.data)
     const task = await prisma.shipmentTask.update({ where: { id: taskId }, data })
-    if (becameDone) {
-      await logEvent(existing.shipmentId, existing.isMilestone ? "milestone" : "note", `✓ ${existing.name}`, request.session?.user.id ?? null, task.actualAt ?? undefined)
+    if (becameDone && existing.isMilestone) {
+      await logMilestone(existing.shipmentId, existing.name, request.session?.user.id ?? null, task.actualAt ?? undefined)
     }
     return reply.send(task)
   })
@@ -236,8 +236,8 @@ export async function processRoutes(app: FastifyInstance) {
 
     const { data, becameDone } = buildTaskUpdate(existing, body.data)
     const task = await prisma.legTask.update({ where: { id: taskId }, data })
-    if (becameDone) {
-      await logEvent(existing.shipmentId, existing.isMilestone ? "milestone" : "note", `✓ ${existing.name}`, request.session?.user.id ?? null, task.actualAt ?? undefined)
+    if (becameDone && existing.isMilestone) {
+      await logMilestone(existing.shipmentId, existing.name, request.session?.user.id ?? null, task.actualAt ?? undefined)
     }
     return reply.send(task)
   })

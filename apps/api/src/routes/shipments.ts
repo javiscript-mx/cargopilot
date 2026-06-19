@@ -117,6 +117,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
             events: {
               create: {
                 type: "status_change",
+                source: "system",
                 title: "Expediente creado",
                 createdBy: userId,
               },
@@ -135,9 +136,6 @@ export async function shipmentsRoutes(app: FastifyInstance) {
         })
         if (templates.length === 1 && templates[0]) {
           await instantiateWorkflow(shipment.id, templates[0].code)
-          await prisma.shipmentEvent.create({
-            data: { shipmentId: shipment.id, type: "note", title: `Proceso aplicado: ${templates[0].name}`, createdBy: userId },
-          })
         }
       } catch (err) {
         request.log.error({ err }, "No se pudo auto-aplicar el workflow al expediente")
@@ -191,6 +189,7 @@ export async function shipmentsRoutes(app: FastifyInstance) {
           events: {
             create: {
               type: "status_change",
+              source: "system",
               title: `Estado: ${STATUS_LABELS[current.status]} → ${STATUS_LABELS[status]}`,
               createdBy: request.session?.user.id ?? null,
             },
@@ -236,8 +235,8 @@ export async function shipmentsRoutes(app: FastifyInstance) {
       const { eventId } = request.params as { id: string; eventId: string }
       const event = await prisma.shipmentEvent.findUnique({ where: { id: eventId } })
       if (!event) return reply.status(404).send({ error: "Evento no encontrado" })
-      if (event.type === "status_change") {
-        return reply.status(400).send({ error: "Los eventos de estado no se pueden eliminar" })
+      if (event.type === "status_change" || event.source === "system") {
+        return reply.status(400).send({ error: "Los eventos automáticos no se pueden eliminar" })
       }
       await prisma.shipmentEvent.delete({ where: { id: eventId } })
       return reply.status(204).send()

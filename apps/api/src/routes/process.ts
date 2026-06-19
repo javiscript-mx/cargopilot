@@ -3,7 +3,7 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
 import { requireAuth, requirePermission } from "../middleware/require-auth.js"
-import { instantiateWorkflow, addLeg } from "../lib/workflow.js"
+import { instantiateWorkflow, addLeg, syncLegScopeTasks } from "../lib/workflow.js"
 
 // ─── Proceso / workflow del expediente (fases, tareas y tramos) ──────────────
 
@@ -18,6 +18,7 @@ const TaskUpdateSchema = z.object({
 type TaskUpdate = z.infer<typeof TaskUpdateSchema>
 
 const LegUpdateSchema = z.object({
+  scope: z.enum(["local", "foraneo"]).optional(),
   status: z.enum(["pending", "in_progress", "done", "cancelled"]).optional(),
   origin: z.record(z.string(), z.unknown()).nullish(),
   destination: z.record(z.string(), z.unknown()).nullish(),
@@ -168,12 +169,18 @@ export async function processRoutes(app: FastifyInstance) {
     if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
     const d = body.data
 
-    const existing = await prisma.shipmentLeg.findUnique({ where: { id: legId }, select: { id: true } })
+    const existing = await prisma.shipmentLeg.findUnique({ where: { id: legId }, select: { id: true, scope: true } })
     if (!existing) return reply.status(404).send({ error: "Tramo no encontrado" })
+
+    // Cambiar el scope reconcilia el checklist del tramo (agrega/quita tareas CP)
+    if (d.scope !== undefined && d.scope !== existing.scope) {
+      await syncLegScopeTasks(legId, d.scope)
+    }
 
     const leg = await prisma.shipmentLeg.update({
       where: { id: legId },
       data: {
+        ...(d.scope !== undefined ? { scope: d.scope } : {}),
         ...(d.status !== undefined ? { status: d.status } : {}),
         ...(d.origin !== undefined ? { origin: d.origin === null ? Prisma.JsonNull : (d.origin as Prisma.InputJsonValue) } : {}),
         ...(d.destination !== undefined ? { destination: d.destination === null ? Prisma.JsonNull : (d.destination as Prisma.InputJsonValue) } : {}),

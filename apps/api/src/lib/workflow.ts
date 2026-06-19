@@ -82,3 +82,45 @@ export async function addLeg(
     include: { tasks: { orderBy: { order: "asc" } } },
   })
 }
+
+// Reconcilia las tareas de un tramo cuando cambia su scope (local <-> foráneo):
+// agrega las tareas de la plantilla que apliquen al nuevo scope y faltan, y borra
+// las que dejan de aplicar SOLO si siguen pendientes (conserva el historial de las
+// ya trabajadas). No toca las tareas "any".
+export async function syncLegScopeTasks(legId: string, newScope: "local" | "foraneo") {
+  const leg = await prisma.shipmentLeg.findUnique({
+    where: { id: legId },
+    select: { id: true, shipmentId: true, legTemplateId: true, tasks: { select: { id: true, code: true, status: true } } },
+  })
+  if (!leg) return
+
+  const template = leg.legTemplateId
+    ? await prisma.legTemplate.findUnique({ where: { id: leg.legTemplateId }, include: { tasks: { orderBy: { order: "asc" } } } })
+    : await prisma.legTemplate.findUnique({ where: { code: "tramo_terrestre" }, include: { tasks: { orderBy: { order: "asc" } } } })
+
+  const desired = (template?.tasks ?? []).filter((t) => t.scope === "any" || t.scope === newScope)
+  const desiredCodes = new Set(desired.map((t) => t.code))
+  const existingCodes = new Set(leg.tasks.map((t) => t.code))
+
+  const toAdd = desired.filter((t) => !existingCodes.has(t.code))
+  const toRemove = leg.tasks.filter((t) => !desiredCodes.has(t.code) && t.status === "pending")
+
+  await prisma.$transaction([
+    ...toRemove.map((t) => prisma.legTask.delete({ where: { id: t.id } })),
+    ...toAdd.map((t) =>
+      prisma.legTask.create({
+        data: {
+          legId: leg.id,
+          shipmentId: leg.shipmentId,
+          taskTemplateId: t.id,
+          code: t.code,
+          name: t.name,
+          order: t.order,
+          isMilestone: t.isMilestone,
+          optional: t.optional,
+          requiredDocs: t.requiredDocs,
+        },
+      }),
+    ),
+  ])
+}

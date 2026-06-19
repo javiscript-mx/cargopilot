@@ -11,13 +11,14 @@ import { LegDrawer } from "@/components/shipments/leg-drawer"
 import { TaskDrawer } from "@/components/shipments/task-drawer"
 import { processApi, type ProcessTask, type ProcessLeg, type LegScope, type LegLocation } from "@/api/process"
 
-export function ProcessSection({ shipmentId }: { shipmentId: string }) {
+export function ProcessSection({ shipmentId, locked = false }: { shipmentId: string; locked?: boolean }) {
   const queryClient = useQueryClient()
   const toast = useToast()
-  // Gestionar (aplicar proceso, tramos) = operaciones; avanzar tareas = también finanzas
+  // Gestionar (aplicar proceso, tramos) = operaciones; avanzar tareas = también finanzas.
+  // Un expediente cancelado queda de solo lectura (locked).
   const { can } = useCan()
-  const canManage = can("shipments.write")
-  const canAdvance = can("shipments.advanceTask")
+  const canManage = can("shipments.write") && !locked
+  const canAdvance = can("shipments.advanceTask") && !locked
 
   const { data: process, isLoading } = useQuery({
     queryKey: ["process", shipmentId],

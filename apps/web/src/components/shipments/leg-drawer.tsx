@@ -6,6 +6,7 @@ import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast"
 import { useCatalog } from "@/hooks/use-catalog"
+import { validateRfc, validateCp, collectErrors, scrollToFirstError } from "@/lib/validators"
 import { suppliersApi } from "@/api/suppliers"
 import { vehiclesApi } from "@/api/vehicles"
 import { operatorsApi } from "@/api/operators"
@@ -16,6 +17,11 @@ const LEG_STATUS_OPTIONS = [
   { value: "in_progress", label: "En progreso" },
   { value: "done", label: "Completado" },
   { value: "cancelled", label: "Cancelado" },
+]
+
+const LEG_SCOPE_OPTIONS = [
+  { value: "local", label: "Local (sin Carta Porte)" },
+  { value: "foraneo", label: "Foráneo (con Carta Porte)" },
 ]
 
 // datetime-local <-> ISO respetando zona horaria local
@@ -45,7 +51,9 @@ export function LegDrawer({
 
   const o = asLoc(leg.origin)
   const d = asLoc(leg.destination)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [form, setForm] = useState({
+    scope: leg.scope,
     status: leg.status,
     carrierSupplierId: leg.carrierSupplierId ?? "",
     vehicleId: leg.vehicleId ?? "",
@@ -90,6 +98,7 @@ export function LegDrawer({
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload: LegPatch = {
+        scope: form.scope,
         status: form.status,
         carrierSupplierId: form.carrierSupplierId || null,
         vehicleId: form.vehicleId || null,
@@ -116,10 +125,24 @@ export function LegDrawer({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    // Validación ligera: RFC/CP solo si se capturaron (la carga es progresiva).
+    const errs = collectErrors({
+      originRfc: validateRfc(form.originRfc, { required: false }),
+      destRfc: validateRfc(form.destRfc, { required: false }),
+      originZip: validateCp(form.originZip),
+      destZip: validateCp(form.destZip),
+    })
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
+      return
+    }
+    setErrors({})
     saveMutation.mutate()
   }
 
-  const foraneo = leg.scope === "foraneo"
+  const foraneo = form.scope === "foraneo"
 
   return (
     <Drawer
@@ -136,6 +159,14 @@ export function LegDrawer({
       }
     >
       <form id="leg-form" onSubmit={handleSave} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <Select id="scope" label="Tipo de tramo" options={LEG_SCOPE_OPTIONS} value={form.scope} onChange={set("scope")} />
+          {form.scope !== leg.scope && (
+            <p className="text-xs text-[--color-muted-foreground]">
+              Cambiar el tipo ajusta el checklist del tramo (agrega o quita las tareas de Carta Porte).
+            </p>
+          )}
+        </div>
         <Select id="status" label="Estado del tramo" options={LEG_STATUS_OPTIONS} value={form.status} onChange={set("status")} />
 
         <section className="flex flex-col gap-3">
@@ -166,8 +197,8 @@ export function LegDrawer({
           <h4 className="text-sm font-semibold">Origen</h4>
           <Input id="originName" label="Nombre / razón social" value={form.originName} onChange={set("originName")} />
           <div className="grid grid-cols-2 gap-3">
-            <Input id="originRfc" label="RFC" value={form.originRfc} onChange={set("originRfc")} maxLength={13} />
-            <Input id="originZip" label="Código postal" value={form.originZip} onChange={set("originZip")} maxLength={5} />
+            <Input id="originRfc" label="RFC" value={form.originRfc} onChange={set("originRfc")} maxLength={13} error={errors["originRfc"]} />
+            <Input id="originZip" label="Código postal" value={form.originZip} onChange={set("originZip")} maxLength={5} error={errors["originZip"]} />
           </div>
           <Input id="originAddress" label="Domicilio" value={form.originAddress} onChange={set("originAddress")} />
         </section>
@@ -176,8 +207,8 @@ export function LegDrawer({
           <h4 className="text-sm font-semibold">Destino</h4>
           <Input id="destName" label="Nombre / razón social" value={form.destName} onChange={set("destName")} />
           <div className="grid grid-cols-2 gap-3">
-            <Input id="destRfc" label="RFC" value={form.destRfc} onChange={set("destRfc")} maxLength={13} />
-            <Input id="destZip" label="Código postal" value={form.destZip} onChange={set("destZip")} maxLength={5} />
+            <Input id="destRfc" label="RFC" value={form.destRfc} onChange={set("destRfc")} maxLength={13} error={errors["destRfc"]} />
+            <Input id="destZip" label="Código postal" value={form.destZip} onChange={set("destZip")} maxLength={5} error={errors["destZip"]} />
           </div>
           <Input id="destAddress" label="Domicilio" value={form.destAddress} onChange={set("destAddress")} />
         </section>

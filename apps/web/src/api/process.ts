@@ -84,6 +84,7 @@ export interface LegLocation {
 }
 
 export interface LegPatch {
+  scope?: LegScope
   status?: ProcessLeg["status"]
   origin?: LegLocation | null
   destination?: LegLocation | null

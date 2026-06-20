@@ -11,7 +11,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { StampDialog } from "@/components/invoices/stamp-dialog"
 import { CancelDialog } from "@/components/invoices/cancel-dialog"
 import { invoicesApi, type Invoice, type InvoiceStatus } from "@/api/invoices"
-import { useSession } from "@/lib/auth-client"
+import { useCan } from "@/lib/permissions"
 
 export const Route = createFileRoute("/invoices/")({
   component: InvoicesPage,
@@ -24,8 +24,10 @@ const statusConfig: Record<InvoiceStatus, { label: string; variant: "default" | 
 }
 
 function InvoicesPage() {
-  const { data: session } = useSession()
-  const isAdmin = (session?.user as { role?: string })?.role === "admin"
+  const { can } = useCan()
+  const canCreate = can("invoices.create")
+  const canStamp = can("invoices.stamp")
+  const canCancel = can("invoices.cancel")
   const [stampTarget, setStampTarget] = useState<Invoice | null>(null)
   const [cancelTarget, setCancelTarget] = useState<Invoice | null>(null)
   const [page, setPage] = useState(1)
@@ -52,9 +54,11 @@ function InvoicesPage() {
           <h1 className="text-2xl font-bold">Facturas</h1>
           <p className="text-[--color-muted-foreground]">{total} facturas en total</p>
         </div>
-        <Link to="/invoices/new" className="w-full sm:w-auto">
-          <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nueva factura</Button>
-        </Link>
+        {canCreate && (
+          <Link to="/invoices/new" className="w-full sm:w-auto">
+            <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nueva factura</Button>
+          </Link>
+        )}
       </div>
 
       <div className="mb-4">
@@ -69,7 +73,7 @@ function InvoicesPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <FileText className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay facturas registradas"}</p>
-              {!debouncedSearch && <Link to="/invoices/new"><Button><Plus className="h-4 w-4" /> Crear primera factura</Button></Link>}
+              {!debouncedSearch && canCreate && <Link to="/invoices/new"><Button><Plus className="h-4 w-4" /> Crear primera factura</Button></Link>}
             </div>
           ) : (
             <>
@@ -91,7 +95,7 @@ function InvoicesPage() {
                       </div>
                       {(inv.status === "draft" || inv.status === "stamped") && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {inv.status === "draft" && (
+                          {inv.status === "draft" && canStamp && (
                             <Button size="sm" variant="outline" onClick={() => setStampTarget(inv)}>Timbrar</Button>
                           )}
                           {inv.status === "stamped" && (
@@ -102,7 +106,7 @@ function InvoicesPage() {
                               <a href={invoicesApi.xmlUrl(inv.id)} target="_blank" rel="noreferrer">
                                 <Button size="sm" variant="outline" className="flex items-center gap-1"><FileCode className="h-3.5 w-3.5" /> XML</Button>
                               </a>
-                              {isAdmin && (
+                              {canCancel && (
                                 <Button size="sm" variant="outline" className="flex items-center gap-1 text-[--color-destructive] hover:bg-red-50" onClick={() => setCancelTarget(inv)}>
                                   <Ban className="h-3.5 w-3.5" /> Cancelar
                                 </Button>
@@ -149,7 +153,7 @@ function InvoicesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-end">
-                          {inv.status === "draft" && (
+                          {inv.status === "draft" && canStamp && (
                             <Button size="sm" variant="outline" onClick={() => setStampTarget(inv)}>
                               Timbrar
                             </Button>
@@ -162,7 +166,7 @@ function InvoicesPage() {
                               <a href={invoicesApi.xmlUrl(inv.id)} target="_blank" rel="noreferrer" title="Descargar XML">
                                 <Button size="sm" variant="ghost"><FileCode className="h-4 w-4" /></Button>
                               </a>
-                              {isAdmin && (
+                              {canCancel && (
                                 <Button
                                   size="sm" variant="ghost"
                                   title="Cancelar factura"

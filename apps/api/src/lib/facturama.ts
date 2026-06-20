@@ -57,7 +57,7 @@ export interface FacturамаCFDIPayload {
   ExpeditionPlace: string  // CP del emisor
   PaymentForm: string      // "03" = Transferencia
   PaymentMethod: string    // "PUE" = Pago en una sola exhibición
-  CfdiType: "I"            // I = Ingreso
+  CfdiType: "I" | "T"      // I = Ingreso (default), T = Traslado (carga propia)
   Receiver: {
     Rfc: string
     Name: string
@@ -68,6 +68,7 @@ export interface FacturамаCFDIPayload {
     NumRegIdTrib?: string  // Tax ID extranjero (solo receptor extranjero)
   }
   Items: FacturamaItem[]
+  Complemento?: unknown    // p. ej. { CartaPorte31: { ... } }
 }
 
 export async function createCFDI(payload: FacturамаCFDIPayload) {

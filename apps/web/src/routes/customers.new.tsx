@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
+import { ensurePermission } from "@/lib/permissions"
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft } from "lucide-react"
@@ -10,6 +11,7 @@ import { CustomerMasterForm } from "@/components/customers/customer-master-form"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/customers/new")({
+  beforeLoad: () => ensurePermission("customers.write"),
   component: NewCustomerPage,
 })
 

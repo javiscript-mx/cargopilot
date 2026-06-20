@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, AlertTriangle } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -129,6 +129,24 @@ interface CustomerMasterFormProps {
   submitLabel: string
   onSubmit: (payload: CustomerPayload) => void
   children?: ReactNode
+  /** Campos a resaltar al llegar (p. ej. desde un expediente con datos faltantes) */
+  highlight?: string[]
+}
+
+// Campos que un expediente puede exigir → etiqueta + clave de error en el form
+const HIGHLIGHT_FIELDS: Record<string, { label: string; errorKey: string }> = {
+  fiscalRegime: { label: "Régimen fiscal", errorKey: "fiscalRegime" },
+  fiscalZipCode: { label: "CP fiscal", errorKey: "fiscalZipCode" },
+  legalName: { label: "Razón social fiscal", errorKey: "legalName" },
+  contacts: { label: "Al menos un contacto", errorKey: "contact_0_name" },
+}
+function initialErrors(highlight: string[] | undefined): Record<string, string> {
+  const e: Record<string, string> = {}
+  for (const key of highlight ?? []) {
+    const f = HIGHLIGHT_FIELDS[key]
+    if (f) e[f.errorKey] = "Requerido para usar el cliente en expedientes"
+  }
+  return e
 }
 
 const emptyContact = (): ContactForm => ({
@@ -206,7 +224,7 @@ function initialState(customer?: Customer): FormState {
   }
 }
 
-export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, children }: CustomerMasterFormProps) {
+export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, children, highlight }: CustomerMasterFormProps) {
   const { items: regimenItems, options: regimenOptions } = useCatalog("sat_tax_regime")
   const { items: cfdiUseItems } = useCatalog("sat_cfdi_use")
   const { options: paymentFormOptions } = useCatalog("sat_payment_form")
@@ -215,8 +233,22 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
   const { options: catalogCurrencyOptions } = useCatalog("currency")
   const toast = useToast()
   const [form, setForm] = useState<FormState>(() => initialState(customer))
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>(() => initialErrors(highlight))
   const isEdit = Boolean(customer)
+  const highlightLabels = (highlight ?? []).map((k) => HIGHLIGHT_FIELDS[k]?.label).filter(Boolean) as string[]
+  // Resalte fuerte (anillo ámbar) para los campos que el expediente exige completar
+  const hlSet = new Set(highlight ?? [])
+  const hl = (key: string) => (hlSet.has(key) ? "ring-2 ring-amber-400 ring-offset-1" : undefined)
+
+  // Al llegar con campos resaltados, lleva la vista al primero
+  useEffect(() => {
+    if (!highlightLabels.length) return
+    const t = setTimeout(() => {
+      document.querySelector(".text-\\[--color-destructive\\]")?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 100)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const countryOptions = catalogCountryOptions.length ? catalogCountryOptions : FALLBACK_COUNTRY_OPTIONS
   const currencyOptions = catalogCurrencyOptions.length ? catalogCurrencyOptions : FALLBACK_CURRENCY_OPTIONS
   const selectedRegime = regimenItems.find((item) => item.code === form.fiscalRegime)
@@ -360,11 +392,20 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
 
   return (
     <form onSubmit={submit} className="flex max-w-5xl flex-col gap-4">
+      {highlightLabels.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50/60 p-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div className="text-sm">
+            <p className="font-semibold">Completa estos datos para usar el cliente en expedientes:</p>
+            <p className="text-[--color-muted-foreground]">{highlightLabels.join(" · ")}</p>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader><CardTitle>Identidad del cliente</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input id="name" label="Nombre visible" value={form.name} onChange={(e) => set("name", e.target.value)} error={errors["name"]} />
-          <Input id="legalName" label="Razón social fiscal" value={form.legalName} onChange={(e) => set("legalName", e.target.value)} placeholder="Debe coincidir con la constancia" />
+          <Input id="legalName" label="Razón social fiscal" value={form.legalName} onChange={(e) => set("legalName", e.target.value)} error={errors["legalName"]} className={hl("legalName")} placeholder="Debe coincidir con la constancia" />
           <Input id="rfc" label={form.taxCountry === "MX" ? "RFC" : "RFC genérico para CFDI"} value={form.rfc} onChange={(e) => set("rfc", e.target.value.toUpperCase())} error={errors["rfc"]} maxLength={13} disabled={isEdit} />
           <Select id="status" label="Estatus operativo" options={STATUS_OPTIONS} value={form.status} onChange={(e) => set("status", e.target.value)} />
           <Select id="customerType" label="Rol principal" options={CUSTOMER_TYPE_OPTIONS} value={form.customerType} onChange={(e) => set("customerType", e.target.value)} />
@@ -376,14 +417,14 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
       <Card>
         <CardHeader><CardTitle>Perfil fiscal</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Select id="fiscalRegime" label="Régimen fiscal" placeholder="Selecciona..." options={regimenOptions} value={form.fiscalRegime} onChange={(e) => set("fiscalRegime", e.target.value)} />
+          <Select id="fiscalRegime" label="Régimen fiscal" placeholder="Selecciona..." options={regimenOptions} value={form.fiscalRegime} onChange={(e) => set("fiscalRegime", e.target.value)} error={errors["fiscalRegime"]} className={hl("fiscalRegime")} />
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-[--color-foreground]">Tipo de persona</span>
             <div className="flex h-9 items-center">
               {persona ? <Badge variant="outline">{PERSONA_LABEL[persona]}</Badge> : <span className="text-sm text-[--color-muted-foreground]">Según RFC / régimen</span>}
             </div>
           </div>
-          <Input id="fiscalZipCode" label="CP fiscal" value={form.fiscalZipCode} onChange={(e) => set("fiscalZipCode", e.target.value)} error={errors["fiscalZipCode"]} maxLength={5} />
+          <Input id="fiscalZipCode" label="CP fiscal" value={form.fiscalZipCode} onChange={(e) => set("fiscalZipCode", e.target.value)} error={errors["fiscalZipCode"]} className={hl("fiscalZipCode")} maxLength={5} />
           <Select id="taxCountry" label="País fiscal" placeholder="Selecciona..." options={countryOptions} value={form.taxCountry} onChange={(e) => set("taxCountry", e.target.value)} />
           {form.taxCountry !== "MX" && (
             <Input id="foreignTaxId" label="Tax ID extranjero" value={form.foreignTaxId} onChange={(e) => set("foreignTaxId", e.target.value)} />
@@ -409,9 +450,12 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={hlSet.has("contacts") ? "ring-2 ring-amber-400" : ""}>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Contactos</CardTitle>
+          <div>
+            <CardTitle>Contactos</CardTitle>
+            {hlSet.has("contacts") && <p className="mt-1 text-sm font-medium text-amber-600">Falta: agrega al menos un contacto.</p>}
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={() => set("contacts", [...form.contacts, emptyContact()])}>
             <Plus className="h-3.5 w-3.5" /> Agregar
           </Button>
@@ -420,7 +464,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
           {form.contacts.map((contact, index) => (
             <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-[--color-border] p-3 md:grid-cols-6">
               <Select id={`contact-type-${index}`} label="Tipo" options={CONTACT_TYPE_OPTIONS} value={contact.type} onChange={(e) => updateContact(index, { type: e.target.value })} />
-              <Input id={`contact-name-${index}`} label="Nombre" value={contact.name} onChange={(e) => updateContact(index, { name: e.target.value })} error={errors[`contact_${index}_name`]} />
+              <Input id={`contact-name-${index}`} label="Nombre" value={contact.name} onChange={(e) => updateContact(index, { name: e.target.value })} error={errors[`contact_${index}_name`]} className={hlSet.has("contacts") && index === 0 ? "ring-2 ring-amber-400 ring-offset-1" : undefined} />
               <Input id={`contact-email-${index}`} label="Correo" type="email" value={contact.email} onChange={(e) => updateContact(index, { email: e.target.value })} error={errors[`contact_${index}_email`]} />
               <Input id={`contact-phone-${index}`} label="Teléfono" value={contact.phone} onChange={(e) => updateContact(index, { phone: e.target.value })} error={errors[`contact_${index}_phone`]} />
               <Input id={`contact-mobile-${index}`} label="Móvil" value={contact.mobile} onChange={(e) => updateContact(index, { mobile: e.target.value })} error={errors[`contact_${index}_mobile`]} />

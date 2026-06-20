@@ -6,13 +6,20 @@ import { customersApi, type CustomerPayload } from "@/api/customers"
 import { DocumentsSection } from "@/components/ui/documents-section"
 import { CustomerMasterForm } from "@/components/customers/customer-master-form"
 import { useToast } from "@/components/ui/toast"
+import { ensurePermission } from "@/lib/permissions"
 
 export const Route = createFileRoute("/customers/$id/edit")({
+  // `missing` = campos a resaltar (vienen del expediente con datos faltantes del cliente)
+  validateSearch: (s: Record<string, unknown>): { missing?: string } =>
+    typeof s.missing === "string" ? { missing: s.missing } : {},
+  beforeLoad: () => ensurePermission("customers.write"),
   component: EditCustomerPage,
 })
 
 function EditCustomerPage() {
   const { id } = Route.useParams()
+  const { missing } = Route.useSearch()
+  const highlight = missing ? missing.split(",").filter(Boolean) : undefined
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -56,6 +63,7 @@ function EditCustomerPage() {
         customer={customer}
         submitLabel="Guardar cambios"
         loading={mutation.isPending}
+        highlight={highlight}
         onSubmit={(payload) => mutation.mutate(payload)}
       >
         <DocumentsSection entityType="customer" entityId={id} />

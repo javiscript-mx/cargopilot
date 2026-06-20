@@ -67,8 +67,24 @@ export interface ShipmentInput {
   operatorId?: string | null
 }
 
+export interface ReadinessBlock {
+  key: string
+  title: string
+  checks: { label: string; ok: boolean }[]
+  ok: boolean
+  applies: boolean
+}
+export interface ShipmentReadiness {
+  blocks: ReadinessBlock[]
+  hasForaneo: boolean
+  gates: Record<"confirmed" | "in_transit" | "delivered", { ok: boolean; missing: string[] }>
+  nextAction: { label: string; hint: string } | null
+  locked: boolean
+}
+
 export const shipmentsApi = {
   list: () => apiClient.get<Shipment[]>("/shipments"),
+  readiness: (id: string) => apiClient.get<ShipmentReadiness>(`/shipments/${id}/readiness`),
   listPaged: (params: PageParams) => apiClient.getPaged<Shipment>(`/shipments?${pageQuery(params)}`),
   get: (id: string) => apiClient.get<Shipment>(`/shipments/${id}`),
   create: (data: ShipmentInput) => apiClient.post<Shipment>("/shipments", data),

@@ -191,6 +191,7 @@ model Shipment {
   workflowTemplateId String?         // código de la plantilla aplicada (soft ref)
   stages             ShipmentStage[]
   legs               ShipmentLeg[]
+  quote              ShipmentQuote?  // cotización/tarifa del servicio (paso "cotizar")
 
   // Autotransporte (Carta Porte): unidad y operador subcontratados
   vehicleId   String?
@@ -199,6 +200,26 @@ model Shipment {
   operator    Operator? @relation(fields: [operatorId], references: [id])
 
   @@map("shipments")
+}
+
+// Cotización / tarifa del servicio (alimenta el paso "cotizar" — kind=quote).
+// Una por expediente. `items` = cargos al cliente [{ concept, amount }]; el margen
+// se calcula contra `estimatedCost` (costo estimado de flete + casetas).
+model ShipmentQuote {
+  id         String   @id @default(cuid())
+  shipmentId String   @unique
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  status        String   @default("draft") // draft | sent | accepted | rejected
+  currency      String   @default("MXN")
+  validUntil    DateTime?
+  items         Json?    // [{ concept: string, amount: number }]
+  estimatedCost Decimal? @db.Decimal(14, 2)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("shipment_quotes")
 }
 
 model ShipmentEvent {
@@ -223,6 +244,7 @@ model Invoice {
   series       String        @default("A")
   folio        String
   status       InvoiceStatus @default(draft)
+  kind         String        @default("service") // service (factura del servicio) | carta_porte (CFDI con complemento CP)
   subtotal     Decimal       @db.Decimal(12, 2)
   tax          Decimal       @db.Decimal(12, 2)
   total        Decimal       @db.Decimal(12, 2)
@@ -307,13 +329,19 @@ model Merchandise {
   containerId String?
   container   Container? @relation(fields: [containerId], references: [id], onDelete: SetNull)
 
-  // Asignación opcional a un tramo (qué unidad la transporta) — Carta Porte por tramo
+  // Asignación opcional a un tramo (Carta Porte por tramo)
   legId       String?
   leg         ShipmentLeg? @relation(fields: [legId], references: [id], onDelete: SetNull)
+
+  // Asignación opcional a una unidad concreta del tramo: reparte la carga cuando
+  // el tramo se corre con varias unidades (p. ej. un full repartido en 2 sencillos).
+  legVehicleId String?
+  legVehicle   LegVehicle? @relation(fields: [legVehicleId], references: [id], onDelete: SetNull)
 
   @@index([shipmentId])
   @@index([containerId])
   @@index([legId])
+  @@index([legVehicleId])
   @@map("merchandise")
 }
 
@@ -362,6 +390,7 @@ model WorkflowTaskTemplate {
   code                    String
   name                    String
   order                   Int
+  kind                    String   @default("generic") // generic | quote | … (panel especializado en la UI)
   isMilestone             Boolean  @default(false)
   optional                Boolean  @default(false)
   responsibleRole         String?  // rol sugerido (admin|operator|finance|viewer)
@@ -395,6 +424,7 @@ model LegTaskTemplate {
   name                    String
   order                   Int
   scope                   String   @default("any") // any | local | foraneo (filtra al instanciar)
+  kind                    String   @default("generic") // generic | quote | … (panel especializado)
   isMilestone             Boolean  @default(false)
   optional                Boolean  @default(false)
   responsibleRole         String?
@@ -434,6 +464,7 @@ model ShipmentTask {
   code        String
   name        String
   order       Int
+  kind        String   @default("generic") // generic | quote | … (panel especializado)
   isMilestone Boolean  @default(false)
   optional    Boolean  @default(false)
   status      String   @default("pending") // pending | in_progress | done | skipped | blocked
@@ -467,25 +498,55 @@ model ShipmentLeg {
   destination Json?
   distanceKm  Decimal? @db.Decimal(10, 2)
 
-  carrierSupplierId String? // soft ref a Supplier (autotransporte)
-  vehicleId         String? // soft ref a Vehicle
-  operatorId        String? // soft ref a Operator
-
   plannedPickupAt   DateTime?
   actualPickupAt    DateTime?
   plannedDeliveryAt DateTime?
   actualDeliveryAt  DateTime?
 
-  cartaPorteInvoiceId String? // soft ref a Invoice (CFDI con complemento CP del tramo foráneo)
   notes               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  // El transporte vive en las unidades: un tramo puede correrse con 1..N unidades
+  // (un sencillo, un full con 2 remolques, o 2 sencillos que reparten la carga).
+  // Cada unidad foránea = un CFDI con complemento Carta Porte.
   tasks       LegTask[]
+  vehicles    LegVehicle[]
   merchandise Merchandise[]
 
   @@index([shipmentId])
   @@map("shipment_legs")
+}
+
+// Asignación de transporte de un tramo. 1 unidad motriz (+ hasta 2 remolques para
+// el "full") + 1 operador + su propio CFDI Carta Porte. La mercancía se reparte
+// entre unidades vía Merchandise.legVehicleId.
+model LegVehicle {
+  id    String      @id @default(cuid())
+  legId String
+  leg   ShipmentLeg @relation(fields: [legId], references: [id], onDelete: Cascade)
+
+  order Int @default(0) // Unidad 1, 2, ...
+
+  carrierSupplierId String? // soft ref a Supplier (autotransporte)
+  vehicleId         String? // soft ref a Vehicle (unidad motriz)
+  operatorId        String? // soft ref a Operator
+
+  // Remolques para configuración "full" / doble remolque (Carta Porte: nodo Remolques)
+  trailer1Plate String?
+  trailer1Type  String? // SubTipoRem SAT (ej. CTR004)
+  trailer2Plate String?
+  trailer2Type  String?
+
+  cartaPorteInvoiceId String? // soft ref a Invoice (CFDI con complemento CP de esta unidad)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  merchandise Merchandise[]
+
+  @@index([legId])
+  @@map("leg_vehicles")
 }
 
 model LegTask {
@@ -498,6 +559,7 @@ model LegTask {
   code        String
   name        String
   order       Int
+  kind        String  @default("generic") // generic | quote | … (panel especializado)
   isMilestone Boolean @default(false)
   optional    Boolean @default(false)
   status      String  @default("pending")

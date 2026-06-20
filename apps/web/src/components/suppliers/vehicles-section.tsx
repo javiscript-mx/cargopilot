@@ -10,6 +10,7 @@ import { vehiclesApi, VEHICLE_STATUS_LABELS, type VehicleStatus } from "@/api/ve
 import { useCatalog } from "@/hooks/use-catalog"
 import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
+import { validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY = {
   plates: "", economicNumber: "", year: "", configVehicular: "",
@@ -36,7 +37,7 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
 
   const [show, setShow] = useState(false)
   const [form, setForm] = useState(EMPTY)
-  const [error, setError] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [search, setSearch] = useState("")
 
   const filtered = useMemo(() => {
@@ -64,10 +65,10 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
         insurancePolicy: form.insurancePolicy || null,
       }),
     onSuccess: () => {
-      invalidate(); setForm(EMPTY); setShow(false); setError("")
+      invalidate(); setForm(EMPTY); setShow(false); setErrors({})
       toast.success("Unidad agregada")
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => toast.error("No se pudo agregar la unidad", err.message),
   })
 
   const statusMutation = useMutation({
@@ -86,7 +87,14 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.plates.trim()) { setError("Las placas son obligatorias"); return }
+    const errs = collectErrors({ plates: validateRequired(form.plates, "Placas") })
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
+      return
+    }
+    setErrors({})
     createMutation.mutate()
   }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -113,7 +121,7 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
           </span>
         )}
         {canManage && (
-          <Button size="sm" className="flex items-center gap-1.5" onClick={() => { setShow(true); setError("") }}>
+          <Button size="sm" className="flex items-center gap-1.5" onClick={() => { setShow(true); setErrors({}) }}>
             <Plus className="h-3.5 w-3.5" /> Agregar unidad
           </Button>
         )}
@@ -121,18 +129,18 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
 
       <Drawer
         open={show}
-        onClose={() => { setShow(false); setError("") }}
+        onClose={() => { setShow(false); setErrors({}) }}
         title="Nueva unidad"
         description="Datos del autotransporte para el complemento Carta Porte."
         footer={
           <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => { setShow(false); setError("") }}>Cancelar</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => { setShow(false); setErrors({}) }}>Cancelar</Button>
             <Button type="submit" form="vehicle-form" size="sm" loading={createMutation.isPending}>Guardar unidad</Button>
           </div>
         }
       >
         <form id="vehicle-form" onSubmit={handleAdd} className="flex flex-col gap-3">
-          <Input id="plates" label="Placas" value={form.plates} onChange={set("plates")} placeholder="ABC1234" />
+          <Input id="plates" label="Placas" value={form.plates} onChange={set("plates")} placeholder="ABC1234" error={errors.plates} />
           <Input id="economicNumber" label="Número económico (alias)" value={form.economicNumber} onChange={set("economicNumber")} placeholder="U-01" />
           <Select id="configVehicular" label="Configuración vehicular" placeholder="Selecciona..." options={configOptions} value={form.configVehicular} onChange={set("configVehicular")} />
           <Input id="year" label="Año modelo" type="number" min="1900" max="2100" value={form.year} onChange={set("year")} />
@@ -141,7 +149,6 @@ export function VehiclesSection({ supplierId }: { supplierId: string }) {
           <Input id="grossWeight" label="Peso bruto vehicular (ton)" type="number" min="0" step="0.001" value={form.grossWeight} onChange={set("grossWeight")} />
           <Input id="insurer" label="Aseguradora (resp. civil)" value={form.insurer} onChange={set("insurer")} />
           <Input id="insurancePolicy" label="Póliza de seguro" value={form.insurancePolicy} onChange={set("insurancePolicy")} />
-          {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
         </form>
       </Drawer>
 

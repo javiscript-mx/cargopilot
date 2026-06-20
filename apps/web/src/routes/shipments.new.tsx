@@ -13,8 +13,10 @@ import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { collectErrors, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
+import { ensurePermission } from "@/lib/permissions"
 
 export const Route = createFileRoute("/shipments/new")({
+  beforeLoad: () => ensurePermission("shipments.write"),
   component: NewShipmentPage,
 })
 

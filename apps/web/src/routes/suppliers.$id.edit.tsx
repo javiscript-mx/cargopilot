@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query"
 import { AppLayout } from "@/components/layout"
 import { SupplierForm } from "@/components/suppliers/supplier-form"
 import { suppliersApi } from "@/api/suppliers"
+import { ensurePermission } from "@/lib/permissions"
 
 export const Route = createFileRoute("/suppliers/$id/edit")({
+  beforeLoad: () => ensurePermission("suppliers.write"),
   component: EditSupplierPage,
 })
 

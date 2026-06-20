@@ -6,6 +6,7 @@ import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
 import { instantiateWorkflow } from "../lib/workflow.js"
+import { getShipmentReadiness, type TargetStatus } from "../lib/shipment-readiness.js"
 
 const ShipmentSchema = z.object({
   customerId: z.string().cuid(),
@@ -89,6 +90,14 @@ export async function shipmentsRoutes(app: FastifyInstance) {
     return reply.send(shipment)
   })
 
+  // Completitud del expediente: bloques listos/faltantes + compuertas + siguiente acción
+  app.get("/shipments/:id/readiness", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const readiness = await getShipmentReadiness(id)
+    if (!readiness) return reply.status(404).send({ error: "Expediente no encontrado" })
+    return reply.send(readiness)
+  })
+
   app.post(
     "/shipments",
     { preHandler: requirePermission("shipments.write") },
@@ -152,6 +161,25 @@ export async function shipmentsRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string }
       const body = ShipmentSchema.partial().safeParse(request.body)
       if (!body.success) return reply.status(400).send({ error: body.error.flatten() })
+
+      const current = await prisma.shipment.findUnique({ where: { id }, select: { customerId: true, operationType: true } })
+      if (!current) return reply.status(404).send({ error: "Expediente no encontrado" })
+
+      // CANDADO: cliente y tipo de operación quedan bloqueados una vez que el expediente
+      // tiene operación real (proceso, tramos, facturas o bitácora) — preserva trazabilidad.
+      const changingCustomer = body.data.customerId !== undefined && body.data.customerId !== current.customerId
+      const changingType = body.data.operationType !== undefined && body.data.operationType !== current.operationType
+      if (changingCustomer || changingType) {
+        // Misma definición de "locked" que el motor de readiness (progreso real:
+        // estado avanzado, tramos, facturas o tareas hechas) — no el workflow auto-aplicado.
+        const readiness = await getShipmentReadiness(id)
+        if (readiness?.locked) {
+          return reply.status(409).send({
+            error: "No se puede cambiar el cliente ni el tipo de operación: el expediente ya tiene operación en curso (tramos, facturas o tareas avanzadas).",
+          })
+        }
+      }
+
       const shipment = await prisma.shipment.update({
         where: { id },
         data: {
@@ -180,6 +208,34 @@ export async function shipmentsRoutes(app: FastifyInstance) {
 
       const current = await prisma.shipment.findUnique({ where: { id }, select: { status: true } })
       if (!current) return reply.status(404).send({ error: "Expediente no encontrado" })
+
+      // CANDADO: máquina de estados secuencial — no se puede brincar etapas
+      // (p. ej. draft → delivered). Avanzar de a un paso, revertir uno, o cancelar.
+      const TRANSITIONS: Record<string, string[]> = {
+        draft: ["confirmed", "cancelled"],
+        confirmed: ["in_transit", "draft", "cancelled"],
+        in_transit: ["delivered", "confirmed", "cancelled"],
+        delivered: ["in_transit"],
+        cancelled: ["draft"],
+      }
+      if (status !== current.status && !(TRANSITIONS[current.status] ?? []).includes(status)) {
+        return reply.status(409).send({
+          error: `Transición no permitida: ${STATUS_LABELS[current.status]} → ${STATUS_LABELS[status]}`,
+        })
+      }
+
+      // CANDADO: no se puede avanzar la operación con datos faltantes. Cancelar y
+      // volver a borrador siempre se permiten; los avances pasan por las compuertas.
+      if (status === "confirmed" || status === "in_transit" || status === "delivered") {
+        const readiness = await getShipmentReadiness(id)
+        const gate = readiness?.gates[status as TargetStatus]
+        if (gate && !gate.ok) {
+          return reply.status(422).send({
+            error: `No se puede pasar a "${STATUS_LABELS[status]}": faltan datos`,
+            missing: gate.missing,
+          })
+        }
+      }
 
       const shipment = await prisma.shipment.update({
         where: { id },

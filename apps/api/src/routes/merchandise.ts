@@ -13,8 +13,9 @@ const MerchandiseSchema = z.object({
   value: z.number().nonnegative().nullish(),  // ValorMercancia
   productKey: z.string().nullish(), // catálogo sat_product_key (ClaveProdServCP)
   hsCode: z.string().nullish(),     // FraccionArancelaria
-  containerId: z.string().cuid().nullish(), // asignación opcional a contenedor
-  legId: z.string().cuid().nullish(),       // asignación opcional a tramo (Carta Porte)
+  containerId: z.string().cuid().nullish(),    // asignación opcional a contenedor
+  legId: z.string().cuid().nullish(),          // asignación opcional a tramo (Carta Porte)
+  legVehicleId: z.string().cuid().nullish(),   // asignación opcional a una unidad del tramo
   notes: z.string().nullish(),
 })
 
@@ -45,6 +46,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
         hsCode: body.data.hsCode ?? null,
         containerId: body.data.containerId ?? null,
         legId: body.data.legId ?? null,
+        legVehicleId: body.data.legVehicleId ?? null,
         notes: body.data.notes ?? null,
       },
     })
@@ -67,6 +69,7 @@ export async function merchandiseRoutes(app: FastifyInstance) {
         hsCode: body.data.hsCode ?? null,
         containerId: body.data.containerId ?? null,
         legId: body.data.legId ?? null,
+        legVehicleId: body.data.legVehicleId ?? null,
         notes: body.data.notes ?? null,
       },
     })

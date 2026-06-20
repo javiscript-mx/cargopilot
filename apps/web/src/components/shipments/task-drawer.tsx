@@ -4,6 +4,7 @@ import { Drawer } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { ArrowRight } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { processApi, type ProcessTask } from "@/api/process"
 
@@ -24,10 +25,12 @@ const toLocalInput = (iso: string | null): string => {
 const toISO = (local: string): string | null => (local ? new Date(local).toISOString() : null)
 
 export function TaskDrawer({
-  open, onClose, shipmentId, task, isLeg,
-}: { open: boolean; onClose: () => void; shipmentId: string; task: ProcessTask; isLeg: boolean }) {
+  open, onClose, shipmentId, task, isLeg, onGoToTab,
+}: { open: boolean; onClose: () => void; shipmentId: string; task: ProcessTask; isLeg: boolean; onGoToTab?: (tab: string) => void }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  // Tareas de ejecución cuya fecha real pertenece al tramo (fuente única de fechas)
+  const isExecutionTask = isLeg && (task.code === "recoleccion" || task.code === "entrega")
 
   const [form, setForm] = useState({
     status: task.status,
@@ -62,6 +65,9 @@ export function TaskDrawer({
     saveMutation.mutate()
   }
 
+  // Tareas que se gestionan en la pestaña Fiscal (no se duplica el form aquí)
+  const fiscalTask = !isLeg && (task.kind === "quote" || task.kind === "invoice")
+
   return (
     <Drawer
       open={open}
@@ -75,16 +81,40 @@ export function TaskDrawer({
         </div>
       }
     >
+      {/* La cotización y la facturación se gestionan en la pestaña Fiscal: aquí solo
+          se marca el avance del paso (no se duplica el formulario). */}
+      {fiscalTask && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-[--color-border] bg-[--color-muted]/40 p-3">
+          <p className="text-sm text-[--color-muted-foreground]">
+            {task.kind === "quote" ? "La tarifa se captura en la pestaña Fiscal." : "La factura se genera y timbra en la pestaña Fiscal."}
+          </p>
+          {onGoToTab && (
+            <Button type="button" size="sm" variant="outline" className="flex shrink-0 items-center gap-1"
+              onClick={() => { onGoToTab("fiscal"); onClose() }}>
+              Ir a Fiscal <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
+
       <form id="task-form" onSubmit={handleSave} className="flex flex-col gap-4">
         <Select id="status" label="Estado" options={TASK_STATUS_OPTIONS} value={form.status} onChange={set("status")} />
-        <Input id="plannedAt" label="Fecha planeada" type="datetime-local" value={form.plannedAt} onChange={set("plannedAt")} />
+        {/* Recolección/entrega: la fecha real es la del TRAMO (fuente única). La planeada
+            vive en el tramo, por eso aquí no se muestra. */}
+        {!isExecutionTask && (
+          <Input id="plannedAt" label="Fecha planeada" type="datetime-local" value={form.plannedAt} onChange={set("plannedAt")} />
+        )}
         <Input
           id="actualAt"
-          label={task.isMilestone ? "Fecha real del hito" : "Fecha de realización"}
+          label={isExecutionTask
+            ? (task.code === "recoleccion" ? "Fecha real de recolección" : "Fecha real de entrega")
+            : (task.isMilestone ? "Fecha real del hito" : "Fecha de realización")}
           type="datetime-local" value={form.actualAt} onChange={set("actualAt")}
         />
         <p className="-mt-2 text-xs text-[--color-muted-foreground]">
-          Puedes registrar una fecha pasada (p. ej. la recolección fue ayer).
+          {isExecutionTask
+            ? "Se guarda como la fecha oficial del tramo (alimenta Carta Porte y el cierre)."
+            : "Puedes registrar una fecha pasada (p. ej. la recolección fue ayer)."}
         </p>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="notes" className="text-sm font-medium text-[--color-foreground]">Notas</label>

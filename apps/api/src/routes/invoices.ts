@@ -38,6 +38,12 @@ async function getSetting(key: string, fallback: string): Promise<string> {
 export async function invoicesRoutes(app: FastifyInstance) {
   app.get("/invoices", { preHandler: requireAuth }, async (request, reply) => {
     const include = { customer: { select: { id: true, name: true, rfc: true } } }
+    // Facturas de un expediente (panel de facturación dentro del proceso)
+    const { shipmentId } = request.query as { shipmentId?: string }
+    if (shipmentId) {
+      const invoices = await prisma.invoice.findMany({ where: { shipmentId }, include, orderBy: { createdAt: "desc" } })
+      return reply.send(invoices)
+    }
     const paging = parsePaging(request.query)
     if (!paging) {
       const invoices = await prisma.invoice.findMany({ include, orderBy: { createdAt: "desc" } })

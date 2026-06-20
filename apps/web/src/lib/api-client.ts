@@ -4,6 +4,7 @@ class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public details?: string[], // p. ej. lista de faltantes (`missing`) de un candado
   ) {
     super(message)
     this.name = "ApiError"
@@ -32,14 +33,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      // Solo declarar JSON cuando hay body: un DELETE sin cuerpo con
+      // Content-Type: application/json hace que Fastify responda 400 (FST_ERR_CTP_EMPTY_JSON_BODY).
+      ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...init.headers,
     },
   })
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }))
-    throw new ApiError(response.status, messageFromError(body.error))
+    throw new ApiError(response.status, messageFromError(body.error), Array.isArray(body.missing) ? body.missing : undefined)
   }
 
   if (response.status === 204) return undefined as T
@@ -59,7 +62,7 @@ async function getPaged<T>(path: string): Promise<Paged<T>> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }))
-    throw new ApiError(response.status, messageFromError(body.error))
+    throw new ApiError(response.status, messageFromError(body.error), Array.isArray(body.missing) ? body.missing : undefined)
   }
   const data = (await response.json()) as T[]
   const total = Number(response.headers.get("X-Total-Count") ?? data.length)

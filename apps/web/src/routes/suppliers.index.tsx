@@ -10,6 +10,7 @@ import { PaginationBar, SearchInput, PAGE_SIZE } from "@/components/ui/paginatio
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { suppliersApi } from "@/api/suppliers"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useCan } from "@/lib/permissions"
 
 export const Route = createFileRoute("/suppliers/")({
   component: SuppliersPage,
@@ -25,6 +26,8 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 function SuppliersPage() {
+  const { can } = useCan()
+  const canWrite = can("suppliers.write")
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
@@ -53,11 +56,13 @@ function SuppliersPage() {
           <h1 className="text-2xl font-bold">Proveedores</h1>
           <p className="text-[--color-muted-foreground]">{total} proveedores registrados</p>
         </div>
-        <Link to="/suppliers/new" className="w-full sm:w-auto">
-          <Button className="flex w-full items-center justify-center gap-2 sm:w-auto">
-            <Plus className="h-4 w-4" /> Nuevo proveedor
-          </Button>
-        </Link>
+        {canWrite && (
+          <Link to="/suppliers/new" className="w-full sm:w-auto">
+            <Button className="flex w-full items-center justify-center gap-2 sm:w-auto">
+              <Plus className="h-4 w-4" /> Nuevo proveedor
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="mb-4">
@@ -72,7 +77,7 @@ function SuppliersPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <Truck className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay proveedores registrados"}</p>
-              {!debouncedSearch && (
+              {!debouncedSearch && canWrite && (
                 <Link to="/suppliers/new"><Button><Plus className="h-4 w-4" /> Agregar primer proveedor</Button></Link>
               )}
             </div>

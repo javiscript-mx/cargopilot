@@ -11,23 +11,45 @@ import { containersApi } from "@/api/containers"
 import { processApi } from "@/api/process"
 import { satApi } from "@/api/sat"
 import { useToast } from "@/components/ui/toast"
+import { validateRequired, validateQuantity, collectErrors, scrollToFirstError } from "@/lib/validators"
 
-// Mapeo catálogos SAT grandes → opciones del picker (búsqueda server-side completa).
+// Clave producto/servicio SAT → picker. `goods: true` excluye servicios: la mercancía
+// de un expediente es un BIEN transportable (Carta Porte), nunca un servicio del catálogo.
 const searchProductKeys = async (q: string): Promise<PickerItem[]> =>
-  (await satApi.searchProdserv(q)).map((p) => ({ code: p.code, label: `${p.code} · ${p.description}` }))
+  (await satApi.searchProdserv(q, { goods: true })).map((p) => ({ code: p.code, label: `${p.code} · ${p.description}` }))
 const resolveProductKey = async (code: string): Promise<PickerItem | null> => {
   const [p] = await satApi.getProdserv(code)
   return p ? { code: p.code, label: `${p.code} · ${p.description}` } : null
 }
-const searchUnitKeys = async (q: string): Promise<PickerItem[]> =>
-  (await satApi.searchUnidades(q)).map((u) => ({ code: u.code, label: `${u.code} · ${u.name}` }))
-const resolveUnitKey = async (code: string): Promise<PickerItem | null> => {
-  const [u] = await satApi.getUnidad(code)
-  return u ? { code: u.code, label: `${u.code} · ${u.name}` } : null
-}
+
+// Unidades de medida que tienen sentido para carga física (masa, conteo, volumen,
+// longitud, empaque). Se acota a esta lista en vez de las ~4,000 del catálogo SAT para
+// evitar errores absurdos (p. ej. "kilowatts de perros"). Codigos c_ClaveUnidad.
+const FREIGHT_UNITS: { value: string; label: string }[] = [
+  { value: "KGM", label: "KGM · Kilogramo" },
+  { value: "TNE", label: "TNE · Tonelada" },
+  { value: "GRM", label: "GRM · Gramo" },
+  { value: "LBR", label: "LBR · Libra" },
+  { value: "H87", label: "H87 · Pieza" },
+  { value: "XUN", label: "XUN · Unidad" },
+  { value: "C62", label: "C62 · Uno" },
+  { value: "DPC", label: "DPC · Docena de piezas" },
+  { value: "XPK", label: "XPK · Paquete" },
+  { value: "XBX", label: "XBX · Caja" },
+  { value: "XCT", label: "XCT · Cartón" },
+  { value: "XBG", label: "XBG · Bolsa" },
+  { value: "XSA", label: "XSA · Saco" },
+  { value: "XPX", label: "XPX · Pallet / tarima" },
+  { value: "XRO", label: "XRO · Rollo" },
+  { value: "MTQ", label: "MTQ · Metro cúbico" },
+  { value: "LTR", label: "LTR · Litro" },
+  { value: "MLT", label: "MLT · Mililitro" },
+  { value: "MTR", label: "MTR · Metro" },
+  { value: "MTK", label: "MTK · Metro cuadrado" },
+]
 
 const EMPTY = {
-  description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", legId: "", notes: "",
+  description: "", quantity: "", unitKey: "", weight: "", value: "", productKey: "", hsCode: "", containerId: "", assign: "", notes: "",
 }
 
 export function MerchandiseBlock({
@@ -50,21 +72,54 @@ export function MerchandiseBlock({
     queryFn: () => processApi.get(shipmentId),
   })
   const legs = process?.legs ?? []
-  const legLabel = (legId: string | null) => {
-    if (!legId) return null
-    const i = legs.findIndex((l) => l.id === legId)
-    return i >= 0 ? `Tramo ${i + 1} (${legs[i]!.scope === "foraneo" ? "foráneo" : "local"})` : null
+  // Opciones de asignación: una por unidad de transporte (reparto de carga); si un
+  // tramo no tiene unidades, se ofrece el tramo "sin unidad". El value codifica el
+  // destino: "v:<unidadId>" o "l:<tramoId>".
+  const assignOptions = legs.flatMap((l, i) =>
+    l.vehicles.length
+      ? l.vehicles.map((v, vi) => {
+          const who = [v.carrierName, v.vehicleLabel].filter(Boolean).join(" · ")
+          return { value: `v:${v.id}`, label: `Tramo ${i + 1} · Unidad ${vi + 1}${who ? ` — ${who}` : ""}` }
+        })
+      : [{ value: `l:${l.id}`, label: `Tramo ${i + 1} (sin unidad)` }],
+  )
+  // Etiqueta para mostrar la asignación de una partida en la lista
+  const assignLabel = (m: Merchandise): string | null => {
+    if (m.legVehicleId) {
+      const opt = assignOptions.find((o) => o.value === `v:${m.legVehicleId}`)
+      if (opt) return opt.label
+    }
+    if (m.legId) {
+      const i = legs.findIndex((l) => l.id === m.legId)
+      if (i >= 0) return `Tramo ${i + 1} (${legs[i]!.scope === "foraneo" ? "foráneo" : "local"})`
+    }
+    return null
   }
 
   const [show, setShow] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY)
-  const [error, setError] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["merchandise", shipmentId] })
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["merchandise", shipmentId] })
+    queryClient.invalidateQueries({ queryKey: ["readiness", shipmentId] })
+  }
+
+  // Decodifica el value del selector a { legId, legVehicleId }
+  const resolveAssign = (assign: string): { legId: string | null; legVehicleId: string | null } => {
+    if (assign.startsWith("v:")) {
+      const legVehicleId = assign.slice(2)
+      const leg = legs.find((l) => l.vehicles.some((v) => v.id === legVehicleId))
+      return { legId: leg?.id ?? null, legVehicleId }
+    }
+    if (assign.startsWith("l:")) return { legId: assign.slice(2), legVehicleId: null }
+    return { legId: null, legVehicleId: null }
+  }
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const { legId, legVehicleId } = resolveAssign(form.assign)
       const payload = {
         description: form.description.trim(),
         quantity: parseFloat(form.quantity),
@@ -74,7 +129,8 @@ export function MerchandiseBlock({
         productKey: form.productKey || null,
         hsCode: form.hsCode || null,
         containerId: form.containerId || null,
-        legId: form.legId || null,
+        legId,
+        legVehicleId,
         notes: form.notes || null,
       }
       return editingId ? merchandiseApi.update(editingId, payload) : merchandiseApi.create({ shipmentId, ...payload })
@@ -84,7 +140,7 @@ export function MerchandiseBlock({
       toast.success(editingId ? "Mercancía actualizada" : "Mercancía agregada")
       close()
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => toast.error("No se pudo guardar la mercancía", err.message),
   })
   const deleteMutation = useMutation({
     mutationFn: merchandiseApi.delete,
@@ -92,26 +148,44 @@ export function MerchandiseBlock({
     onError: (err: Error) => toast.error("No se pudo eliminar la mercancía", err.message),
   })
 
-  function openNew() { setEditingId(null); setForm(EMPTY); setError(""); setShow(true) }
+  function openNew() { setEditingId(null); setForm(EMPTY); setErrors({}); setShow(true) }
   function openEdit(m: Merchandise) {
     setEditingId(m.id)
     setForm({
       description: m.description, quantity: m.quantity ?? "", unitKey: m.unitKey ?? "",
       weight: m.weight ?? "", value: m.value ?? "", productKey: m.productKey ?? "",
-      hsCode: m.hsCode ?? "", containerId: m.containerId ?? "", legId: m.legId ?? "", notes: m.notes ?? "",
+      hsCode: m.hsCode ?? "", containerId: m.containerId ?? "",
+      assign: m.legVehicleId ? `v:${m.legVehicleId}` : m.legId ? `l:${m.legId}` : "",
+      notes: m.notes ?? "",
     })
-    setError(""); setShow(true)
+    setErrors({}); setShow(true)
   }
-  function close() { setShow(false); setEditingId(null); setForm(EMPTY); setError("") }
+  function close() { setShow(false); setEditingId(null); setForm(EMPTY); setErrors({}) }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.description.trim()) { setError("La descripción es obligatoria"); return }
-    if (!form.quantity || parseFloat(form.quantity) <= 0) { setError("La cantidad debe ser mayor a 0"); return }
+    const errs = collectErrors({
+      description: validateRequired(form.description, "Descripción"),
+      quantity: validateQuantity(form.quantity),
+      unitKey: form.unitKey ? undefined : "Selecciona la unidad de medida",
+    })
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
+      return
+    }
+    setErrors({})
     saveMutation.mutate()
   }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  // Si la partida ya traía una unidad fuera de la lista de carga (datos viejos), se
+  // conserva como opción para no perderla, pero las nuevas se eligen de la lista acotada.
+  const unitOptions = form.unitKey && !FREIGHT_UNITS.some((u) => u.value === form.unitKey)
+    ? [{ value: form.unitKey, label: form.unitKey }, ...FREIGHT_UNITS]
+    : FREIGHT_UNITS
 
   const fmt = (n: string | null) => (n != null ? parseFloat(n).toLocaleString("es-MX") : null)
 
@@ -132,7 +206,7 @@ export function MerchandiseBlock({
           {m.weight && <span>{fmt(m.weight)} kg</span>}
           {m.value && <span>${fmt(m.value)}</span>}
           {m.hsCode && <span>Fracción: {m.hsCode}</span>}
-          {legLabel(m.legId) && <span className="text-[--color-primary]">{legLabel(m.legId)}</span>}
+          {assignLabel(m) && <span className="text-[--color-primary]">{assignLabel(m)}</span>}
         </div>
       </div>
       {canEdit && (
@@ -177,46 +251,60 @@ export function MerchandiseBlock({
             </div>
           }
         >
-          <form id="merchandise-form" onSubmit={handleSave} className="flex flex-col gap-3">
-            <Input id="description" label="Descripción" value={form.description} onChange={set("description")} placeholder="Mercancía general, autopartes..." />
-            <div className="grid grid-cols-2 gap-3">
-              <Input id="quantity" label="Cantidad" type="number" min="0" step="0.001" value={form.quantity} onChange={set("quantity")} />
+          <form id="merchandise-form" onSubmit={handleSave} className="flex flex-col gap-5">
+            <section className="flex flex-col gap-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">Qué es</h4>
+              <Input id="description" label="Descripción" value={form.description} onChange={set("description")} placeholder="Mercancía general, autopartes..." error={errors.description} />
+              <Input id="quantity" label="Cantidad" type="number" min="0" step="0.001" value={form.quantity} onChange={set("quantity")} error={errors.quantity} />
+            </section>
+
+            <section className="flex flex-col gap-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">Claves SAT (Carta Porte)</h4>
               <SatPicker
-                label="Unidad (SAT)" cacheKey="unidades"
-                value={form.unitKey} onChange={(code) => setForm((f) => ({ ...f, unitKey: code }))}
-                search={searchUnitKeys} resolve={resolveUnitKey}
-                placeholder="Buscar unidad..."
+                label="Producto (SAT · solo bienes)" cacheKey="prodserv"
+                value={form.productKey} onChange={(code) => setForm((f) => ({ ...f, productKey: code }))}
+                search={searchProductKeys} resolve={resolveProductKey}
+                placeholder="Buscar producto (sin servicios)..."
               />
-            </div>
-            <SatPicker
-              label="Clave producto/servicio (SAT)" cacheKey="prodserv"
-              value={form.productKey} onChange={(code) => setForm((f) => ({ ...f, productKey: code }))}
-              search={searchProductKeys} resolve={resolveProductKey}
-              placeholder="Buscar clave de producto..."
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Input id="weight" label="Peso (kg)" type="number" min="0" step="0.001" value={form.weight} onChange={set("weight")} />
-              <Input id="value" label="Valor (MXN)" type="number" min="0" step="0.01" value={form.value} onChange={set("value")} />
-            </div>
-            <Input id="hsCode" label="Fracción arancelaria (opcional)" value={form.hsCode} onChange={set("hsCode")} placeholder="Comercio exterior" />
-            {contenerizada && (
               <Select
-                id="containerId" label="Contenedor (opcional)"
-                placeholder="Sin asignar"
-                options={containers.map((c) => ({ value: c.id, label: c.number }))}
-                value={form.containerId} onChange={set("containerId")}
+                id="unitKey" label="Unidad de medida" placeholder="Selecciona..."
+                options={unitOptions} value={form.unitKey} onChange={set("unitKey")}
+                error={errors.unitKey}
               />
+              <Input id="hsCode" label="Fracción arancelaria (opcional)" value={form.hsCode} onChange={set("hsCode")} placeholder="Comercio exterior" />
+            </section>
+
+            <section className="flex flex-col gap-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">Peso y valor</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <Input id="weight" label="Peso (kg)" type="number" min="0" step="0.001" value={form.weight} onChange={set("weight")} />
+                <Input id="value" label="Valor (MXN)" type="number" min="0" step="0.01" value={form.value} onChange={set("value")} />
+              </div>
+            </section>
+
+            {(contenerizada || assignOptions.length > 0) && (
+              <section className="flex flex-col gap-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">Asignación</h4>
+                {contenerizada && (
+                  <Select
+                    id="containerId" label="Contenedor (opcional)"
+                    placeholder="Sin asignar"
+                    options={containers.map((c) => ({ value: c.id, label: c.number }))}
+                    value={form.containerId} onChange={set("containerId")}
+                  />
+                )}
+                {assignOptions.length > 0 && (
+                  <Select
+                    id="assign" label="Tramo / unidad (opcional)"
+                    placeholder="Sin asignar"
+                    options={assignOptions}
+                    value={form.assign} onChange={set("assign")}
+                  />
+                )}
+              </section>
             )}
-            {legs.length > 0 && (
-              <Select
-                id="legId" label="Tramo / unidad (opcional)"
-                placeholder="Sin asignar"
-                options={legs.map((l, i) => ({ value: l.id, label: `Tramo ${i + 1} (${l.scope === "foraneo" ? "foráneo" : "local"})` }))}
-                value={form.legId} onChange={set("legId")}
-              />
-            )}
+
             <Input id="notes" label="Notas (opcional)" value={form.notes} onChange={set("notes")} />
-            {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
           </form>
         </Drawer>
       )}

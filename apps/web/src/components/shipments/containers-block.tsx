@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { containersApi, type Container } from "@/api/containers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
+import { validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY = { number: "", type: "", seal: "", tare: "", notes: "" }
 
@@ -24,7 +25,7 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
   const [show, setShow] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY)
-  const [error, setError] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", shipmentId] })
 
@@ -44,7 +45,7 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
       toast.success(editingId ? "Contenedor actualizado" : "Contenedor agregado")
       close()
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => toast.error("No se pudo guardar el contenedor", err.message),
   })
   const deleteMutation = useMutation({
     mutationFn: containersApi.delete,
@@ -52,17 +53,24 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
     onError: (err: Error) => toast.error("No se pudo eliminar el contenedor", err.message),
   })
 
-  function openNew() { setEditingId(null); setForm(EMPTY); setError(""); setShow(true) }
+  function openNew() { setEditingId(null); setForm(EMPTY); setErrors({}); setShow(true) }
   function openEdit(c: Container) {
     setEditingId(c.id)
     setForm({ number: c.number, type: c.type ?? "", seal: c.seal ?? "", tare: c.tare ?? "", notes: c.notes ?? "" })
-    setError(""); setShow(true)
+    setErrors({}); setShow(true)
   }
-  function close() { setShow(false); setEditingId(null); setForm(EMPTY); setError("") }
+  function close() { setShow(false); setEditingId(null); setForm(EMPTY); setErrors({}) }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.number.trim()) { setError("El número de contenedor es obligatorio"); return }
+    const errs = collectErrors({ number: validateRequired(form.number, "Número de contenedor") })
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      toast.error("Revisa los campos marcados", "Hay datos por corregir antes de guardar.")
+      scrollToFirstError()
+      return
+    }
+    setErrors({})
     saveMutation.mutate()
   }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -98,14 +106,13 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
           }
         >
           <form id="container-form" onSubmit={handleSave} className="flex flex-col gap-3">
-            <Input id="number" label="Número / matrícula" value={form.number} onChange={set("number")} placeholder="MSKU1234567" />
+            <Input id="number" label="Número / matrícula" value={form.number} onChange={set("number")} placeholder="MSKU1234567" error={errors.number} />
             <Select id="type" label="Tipo de contenedor" placeholder="Selecciona..." options={typeOptions} value={form.type} onChange={set("type")} />
             <div className="grid grid-cols-2 gap-3">
               <Input id="seal" label="Sello / precinto" value={form.seal} onChange={set("seal")} />
               <Input id="tare" label="Tara (kg)" type="number" min="0" step="0.001" value={form.tare} onChange={set("tare")} />
             </div>
             <Input id="notes" label="Notas (opcional)" value={form.notes} onChange={set("notes")} />
-            {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
           </form>
         </Drawer>
       )}

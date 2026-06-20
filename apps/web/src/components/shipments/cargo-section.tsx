@@ -12,10 +12,11 @@ interface Props {
   shipmentId: string
   cargoType: string | null
   canEdit: boolean
+  bare?: boolean
 }
 
 // Sección unificada de carga: la modalidad es el "dial" que reconfigura qué se captura.
-export function CargoSection({ shipmentId, cargoType, canEdit }: Props) {
+export function CargoSection({ shipmentId, cargoType, canEdit, bare = false }: Props) {
   const queryClient = useQueryClient()
   const toast = useToast()
   const { items: cargoTypes, simpleOptions: cargoOptions } = useCatalog("cargo_type")
@@ -32,13 +33,13 @@ export function CargoSection({ shipmentId, cargoType, canEdit }: Props) {
   })
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className={bare ? "border-0 bg-transparent shadow-none" : ""}>
+      <CardHeader className={bare ? "p-0 pb-3" : "pb-3"}>
         <CardTitle className="flex items-center gap-2 text-base">
           <Boxes className="h-4 w-4 text-[--color-muted-foreground]" /> Carga
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+      <CardContent className={bare ? "flex flex-col gap-5 p-0" : "flex flex-col gap-5"}>
         {/* Modalidad — el interruptor que define qué se captura */}
         <div className="flex flex-col gap-1.5 sm:max-w-xs">
           {canEdit ? (

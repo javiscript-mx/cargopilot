@@ -14,6 +14,7 @@ export interface Merchandise {
   hsCode: string | null    // FraccionArancelaria
   containerId: string | null // contenedor asignado (opcional)
   legId: string | null       // tramo asignado (Carta Porte por tramo)
+  legVehicleId: string | null // unidad del tramo asignada (reparto de carga)
   notes: string | null
   createdAt: string
 }
@@ -29,6 +30,7 @@ export interface MerchandiseInput {
   hsCode?: string | null
   containerId?: string | null
   legId?: string | null
+  legVehicleId?: string | null
   notes?: string | null
 }
 

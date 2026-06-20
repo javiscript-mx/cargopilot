@@ -12,6 +12,7 @@ import { customersApi, type CustomerDetail, type CustomerContact, type CustomerA
 import { invoicesApi } from "@/api/invoices"
 import { STATUS_CONFIG as SHIPMENT_STATUS } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useCan } from "@/lib/permissions"
 import { personaType, PERSONA_LABEL } from "@/lib/fiscal"
 
 export const Route = createFileRoute("/customers/$id/")({
@@ -70,6 +71,7 @@ function money(value: string | number | null, currency = "MXN"): string {
 
 function CustomerDetailPage() {
   const { id } = Route.useParams()
+  const { can } = useCan()
   const [tab, setTab] = useState("expedientes")
 
   const { data: customer, isLoading } = useQuery({
@@ -138,11 +140,13 @@ function CustomerDetailPage() {
             <Badge variant="outline">{CUSTOMER_TYPE[c.customerType] ?? c.customerType}</Badge>
             {!fiscallyComplete && <Badge variant="warning">Datos fiscales incompletos</Badge>}
           </div>
-          <Link to="/customers/$id/edit" params={{ id }}>
-            <Button variant="outline" size="sm" className="flex items-center gap-1.5">
-              <Pencil className="h-3.5 w-3.5" /> Editar
-            </Button>
-          </Link>
+          {can("customers.write") && (
+            <Link to="/customers/$id/edit" params={{ id }}>
+              <Button variant="outline" size="sm" className="flex items-center gap-1.5">
+                <Pencil className="h-3.5 w-3.5" /> Editar
+              </Button>
+            </Link>
+          )}
         </div>
         {c.legalName && c.legalName !== c.name && (
           <p className="mt-1 text-sm text-[--color-muted-foreground]">{c.legalName}</p>

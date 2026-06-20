@@ -12,8 +12,10 @@ import { customersApi } from "@/api/customers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { collectErrors, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
+import { ensurePermission } from "@/lib/permissions"
 
 export const Route = createFileRoute("/shipments/$id/edit")({
+  beforeLoad: () => ensurePermission("shipments.write"),
   component: EditShipmentPage,
 })
 
@@ -28,6 +30,8 @@ function EditShipmentPage() {
     queryFn: () => shipmentsApi.get(id),
   })
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: customersApi.list })
+  const { data: readiness } = useQuery({ queryKey: ["readiness", id], queryFn: () => shipmentsApi.readiness(id) })
+  const locked = readiness?.locked ?? false
   const { items: operationItems, simpleOptions: operationOptions } = useCatalog("service_type")
 
   type FormState = {
@@ -130,13 +134,18 @@ function EditShipmentPage() {
             <Select
               id="customerId" label="Cliente"
               options={customers.map((c) => ({ value: c.id, label: `${c.name} (${c.rfc})` }))}
-              {...f("customerId")} error={errors["customerId"]}
+              {...f("customerId")} error={errors["customerId"]} disabled={locked}
             />
             <Select
               id="operationType" label="Tipo de operación"
               options={operationOptions}
-              {...f("operationType")} error={errors["operationType"]}
+              {...f("operationType")} error={errors["operationType"]} disabled={locked}
             />
+            {locked && (
+              <p className="-mt-2 text-xs text-[--color-muted-foreground]">
+                Cliente y tipo de operación quedan bloqueados: el expediente ya tiene operación en curso (proceso, tramos, facturas o bitácora).
+              </p>
+            )}
             <Input
               id="reference" label="Referencia (opcional)"
               placeholder="Booking, BL, número de contenedor..."

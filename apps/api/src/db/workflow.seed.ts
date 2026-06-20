@@ -7,6 +7,7 @@ import { prisma } from "./client.js"
 interface TaskSeed {
   code: string
   name: string
+  kind?: string // panel especializado en la UI (generic | quote | …)
   isMilestone?: boolean
   optional?: boolean
   responsibleRole?: string
@@ -32,7 +33,7 @@ const FLETE_TERRESTRE: { code: string; name: string; operationType: string; desc
       name: "Instrucción y cotización",
       tasks: [
         { code: "recibir_instruccion", name: "Recibir instrucción del cliente", responsibleRole: "operator" },
-        { code: "cotizar", name: "Cotizar / confirmar tarifa", responsibleRole: "operator", requiredDocs: ["cotizacion"] },
+        { code: "cotizar", name: "Cotizar / confirmar tarifa", kind: "quote", responsibleRole: "operator", requiredDocs: ["cotizacion"] },
         { code: "confirmar_servicio", name: "Confirmar servicio con cliente", isMilestone: true, responsibleRole: "operator" },
       ],
     },
@@ -47,7 +48,7 @@ const FLETE_TERRESTRE: { code: string; name: string; operationType: string; desc
       code: "cierre",
       name: "Cierre y facturación",
       tasks: [
-        { code: "facturar", name: "Facturar servicio al cliente", responsibleRole: "finance", requiredDocs: ["factura"] },
+        { code: "facturar", name: "Facturar servicio al cliente", kind: "invoice", responsibleRole: "finance", requiredDocs: ["factura"] },
         { code: "conciliar", name: "Conciliar costos (flete, casetas)", responsibleRole: "finance" },
         { code: "cerrar", name: "Cerrar expediente", isMilestone: true, responsibleRole: "operator" },
       ],
@@ -91,6 +92,7 @@ export async function seedWorkflowTemplates(): Promise<void> {
                 code: t.code,
                 name: t.name,
                 order: ti + 1,
+                kind: t.kind ?? "generic",
                 isMilestone: t.isMilestone ?? false,
                 optional: t.optional ?? false,
                 responsibleRole: t.responsibleRole ?? null,
@@ -118,6 +120,7 @@ export async function seedWorkflowTemplates(): Promise<void> {
             name: t.name,
             order: ti + 1,
             scope: t.scope ?? "any",
+            kind: t.kind ?? "generic",
             isMilestone: t.isMilestone ?? false,
             optional: t.optional ?? false,
             responsibleRole: t.responsibleRole ?? null,

@@ -31,10 +31,10 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
             aria-selected={isActive}
             onClick={() => onChange(t.id)}
             className={cn(
-              "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              "-mb-px flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-4 py-2.5 text-sm transition-colors",
               isActive
-                ? "border-[--color-primary] text-[--color-primary]"
-                : "border-transparent text-[--color-muted-foreground] hover:text-[--color-foreground]",
+                ? "border-[--color-primary] bg-[--color-primary]/10 font-semibold text-[--color-primary]"
+                : "border-transparent font-medium text-[--color-muted-foreground] hover:bg-[--color-muted] hover:text-[--color-foreground]",
             )}
           >
             {t.icon}

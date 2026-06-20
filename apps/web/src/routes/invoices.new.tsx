@@ -15,8 +15,10 @@ import { Badge } from "@/components/ui/badge"
 import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
 import { validateRequired, validateQuantity, validateUnitPrice, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
+import { ensurePermission } from "@/lib/permissions"
 
 export const Route = createFileRoute("/invoices/new")({
+  beforeLoad: () => ensurePermission("invoices.create"),
   component: NewInvoicePage,
 })
 

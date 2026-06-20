@@ -10,12 +10,15 @@ import { PaginationBar, SearchInput, PAGE_SIZE } from "@/components/ui/paginatio
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { shipmentsApi, STATUS_CONFIG } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
+import { useCan } from "@/lib/permissions"
 
 export const Route = createFileRoute("/shipments/")({
   component: ShipmentsPage,
 })
 
 function ShipmentsPage() {
+  const { can } = useCan()
+  const canWrite = can("shipments.write")
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
@@ -43,9 +46,11 @@ function ShipmentsPage() {
           <h1 className="text-2xl font-bold">Expedientes</h1>
           <p className="text-[--color-muted-foreground]">{total} operaciones en total</p>
         </div>
-        <Link to="/shipments/new" className="w-full sm:w-auto">
-          <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nuevo expediente</Button>
-        </Link>
+        {canWrite && (
+          <Link to="/shipments/new" className="w-full sm:w-auto">
+            <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nuevo expediente</Button>
+          </Link>
+        )}
       </div>
 
       <div className="mb-4">
@@ -60,7 +65,7 @@ function ShipmentsPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <Package className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay expedientes registrados"}</p>
-              {!debouncedSearch && <Link to="/shipments/new"><Button><Plus className="h-4 w-4" /> Crear primer expediente</Button></Link>}
+              {!debouncedSearch && canWrite && <Link to="/shipments/new"><Button><Plus className="h-4 w-4" /> Crear primer expediente</Button></Link>}
             </div>
           ) : (
             <>

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { PaginationBar, SearchInput, PAGE_SIZE } from "@/components/ui/pagination"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { customersApi } from "@/api/customers"
+import { useCan } from "@/lib/permissions"
 
 export const Route = createFileRoute("/customers/")({
   component: CustomersPage,
@@ -25,6 +26,8 @@ const statusConfig: Record<string, { label: string; variant: "default" | "succes
 const fallbackStatus = statusConfig["prospect"]!
 
 function CustomersPage() {
+  const { can } = useCan()
+  const canWrite = can("customers.write")
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
@@ -49,9 +52,11 @@ function CustomersPage() {
           <h1 className="text-2xl font-bold">Clientes</h1>
           <p className="text-[--color-muted-foreground]">{total} clientes registrados</p>
         </div>
-        <Link to="/customers/new" className="w-full sm:w-auto">
-          <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nuevo cliente</Button>
-        </Link>
+        {canWrite && (
+          <Link to="/customers/new" className="w-full sm:w-auto">
+            <Button className="flex w-full items-center justify-center gap-2 sm:w-auto"><Plus className="h-4 w-4" /> Nuevo cliente</Button>
+          </Link>
+        )}
       </div>
 
       <div className="mb-4">
@@ -66,7 +71,7 @@ function CustomersPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
               <Building2 className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay clientes registrados"}</p>
-              {!debouncedSearch && <Link to="/customers/new"><Button><Plus className="h-4 w-4" /> Agregar primer cliente</Button></Link>}
+              {!debouncedSearch && canWrite && <Link to="/customers/new"><Button><Plus className="h-4 w-4" /> Agregar primer cliente</Button></Link>}
             </div>
           ) : (
             <>
@@ -135,11 +140,13 @@ function CustomersPage() {
                       {new Date(c.createdAt).toLocaleDateString("es-MX")}
                     </td>
                     <td className="px-4 py-3">
-                      <Link to="/customers/$id/edit" params={{ id: c.id }}>
-                        <Button variant="outline" size="sm" className="flex items-center gap-1">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
+                      {canWrite && (
+                        <Link to="/customers/$id/edit" params={{ id: c.id }}>
+                          <Button variant="outline" size="sm" className="flex items-center gap-1">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

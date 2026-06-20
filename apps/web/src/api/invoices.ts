@@ -19,6 +19,7 @@ export interface Invoice {
 
 export const invoicesApi = {
   list: () => apiClient.get<Invoice[]>("/invoices"),
+  listByShipment: (shipmentId: string) => apiClient.get<Invoice[]>(`/invoices?shipmentId=${shipmentId}`),
   listPaged: (params: PageParams) => apiClient.getPaged<Invoice>(`/invoices?${pageQuery(params)}`),
   get: (id: string) => apiClient.get<Invoice>(`/invoices/${id}`),
   create: (data: {

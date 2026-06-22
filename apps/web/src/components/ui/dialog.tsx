@@ -25,16 +25,16 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         className={cn(
-          "relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-[--color-border]",
+          "relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-[var(--color-border)]",
           "bg-white shadow-xl",
           className,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[--color-border] px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded p-1 hover:bg-[--color-muted] transition-colors"
+            className="rounded p-1 hover:bg-[var(--color-muted)] transition-colors"
           >
             <X className="h-4 w-4" />
           </button>

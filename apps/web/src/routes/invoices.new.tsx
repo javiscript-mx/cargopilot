@@ -6,13 +6,15 @@ import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Button } from "@/components/ui/button"
 import { invoicesApi } from "@/api/invoices"
 import { customersApi } from "@/api/customers"
 import { shipmentsApi } from "@/api/shipments"
 import { useCatalog } from "@/hooks/use-catalog"
 import { Badge } from "@/components/ui/badge"
-import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
+import { personaType, personaFromRfc, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
+import { computeTaxes } from "@/lib/taxes"
 import { validateRequired, validateQuantity, validateUnitPrice, scrollToFirstError } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
 import { ensurePermission } from "@/lib/permissions"
@@ -137,15 +139,18 @@ function NewInvoicePage() {
     })
   }
 
-  const subtotal = items.reduce((acc, item) => acc + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0)
-  const tax = subtotal * 0.16
+  // IVA 16% + retención IVA 4% (autotransporte a receptor PM) — ver lib/taxes
+  const invoiceTax = computeTaxes(
+    items.map((item) => ({ amount: (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), productCode: item.productCode })),
+    personaFromRfc(selectedCustomer?.rfc),
+  )
   const fmt = (n: number) => `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
   const customerShipments = shipments.filter((s) => s.customer.id === customerId && s.status !== "cancelled")
 
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/invoices" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/invoices" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Facturas
         </Link>
         <h1 className="text-2xl font-bold">Nueva factura</h1>
@@ -188,7 +193,7 @@ function NewInvoicePage() {
             <Select id="paymentMethod" label="Método de pago" placeholder="Selecciona..." options={paymentMethodOptions} value={paymentMethod} onChange={(e) => onPaymentMethodChange(e.target.value)} />
             <div className="flex flex-col gap-1">
               <Select id="paymentForm" label="Forma de pago" placeholder="Selecciona..." options={formOptions} value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} disabled={isPPD} />
-              {isPPD && <p className="text-xs text-[--color-muted-foreground]">PPD usa forma "99 - Por definir" (regla SAT).</p>}
+              {isPPD && <p className="text-xs text-[var(--color-muted-foreground)]">PPD usa forma "99 - Por definir" (regla SAT).</p>}
             </div>
           </CardContent>
         </Card>
@@ -204,7 +209,7 @@ function NewInvoicePage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {items.map((item, idx) => (
-              <div key={idx} className="flex flex-col gap-2 rounded-md border border-[--color-border] p-3">
+              <div key={idx} className="flex flex-col gap-2 rounded-md border border-[var(--color-border)] p-3">
                 <div className="grid grid-cols-[1fr_80px_110px_36px] items-start gap-2">
                   <Input
                     placeholder="Descripción del servicio"
@@ -219,18 +224,17 @@ function NewInvoicePage() {
                     onChange={(e) => updateItem(idx, "quantity", e.target.value)}
                     error={errors[`item_${idx}_qty`]}
                   />
-                  <Input
+                  <MoneyInput
                     placeholder="Precio unit."
-                    type="number" min="0.01" step="0.01"
                     value={item.unitPrice}
-                    onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
+                    onChange={(v) => updateItem(idx, "unitPrice", v)}
                     error={errors[`item_${idx}_price`]}
                   />
                   <button
                     type="button"
                     onClick={() => setItems((p) => p.filter((_, i) => i !== idx))}
                     disabled={items.length === 1}
-                    className="mt-1 flex h-8 w-8 items-center justify-center rounded text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive] disabled:opacity-30"
+                    className="mt-1 flex h-8 w-8 items-center justify-center rounded text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)] disabled:opacity-30"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -250,10 +254,13 @@ function NewInvoicePage() {
               </div>
             ))}
 
-            <div className="mt-2 rounded-md bg-[--color-muted] p-3 text-sm self-end w-56">
-              <div className="flex justify-between text-[--color-muted-foreground]"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
-              <div className="flex justify-between text-[--color-muted-foreground]"><span>IVA 16%</span><span>{fmt(tax)}</span></div>
-              <div className="mt-1 flex justify-between border-t border-[--color-border] pt-1 font-semibold"><span>Total</span><span>{fmt(subtotal + tax)}</span></div>
+            <div className="mt-2 self-end w-64 rounded-md bg-[var(--color-muted)] p-3 text-sm">
+              <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Subtotal</span><span>{fmt(invoiceTax.subtotal)}</span></div>
+              <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>IVA 16%</span><span>{fmt(invoiceTax.ivaTraslado)}</span></div>
+              {invoiceTax.retentionApplies && (
+                <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Retención IVA 4%</span><span>− {fmt(invoiceTax.ivaRetencion)}</span></div>
+              )}
+              <div className="mt-1 flex justify-between border-t border-[var(--color-border)] pt-1 font-semibold"><span>Total</span><span>{fmt(invoiceTax.total)}</span></div>
             </div>
           </CardContent>
         </Card>

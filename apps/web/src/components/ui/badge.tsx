@@ -11,11 +11,11 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
         {
-          "bg-[--color-primary] text-[--color-primary-foreground]": variant === "default",
+          "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]": variant === "default",
           "bg-green-100 text-green-800": variant === "success",
           "bg-yellow-100 text-yellow-800": variant === "warning",
           "bg-red-100 text-red-800": variant === "destructive",
-          "border border-[--color-border] text-[--color-foreground]": variant === "outline",
+          "border border-[var(--color-border)] text-[var(--color-foreground)]": variant === "outline",
         },
         className,
       )}

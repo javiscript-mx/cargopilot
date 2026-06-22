@@ -16,6 +16,7 @@ const SupplierSchema = z.object({
   contact: z.string().nullish(),
   address: z.record(z.string(), z.unknown()).nullish(),
   notes: z.string().nullish(),
+  creditTermsDays: z.number().int().min(0).max(365).nullish(),
   active: z.boolean().optional(),
 })
 

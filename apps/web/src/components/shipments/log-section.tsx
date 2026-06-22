@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 import { useCatalog } from "@/hooks/use-catalog"
 import { shipmentsApi, type ShipmentEvent } from "@/api/shipments"
 
@@ -25,6 +26,7 @@ function formatDateTime(iso: string): string {
 export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: string; canEdit: boolean; canDelete: boolean }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const { simpleOptions: milestoneOptions } = useCatalog("milestone")
   const { data: shipment } = useQuery({ queryKey: ["shipments", shipmentId], queryFn: () => shipmentsApi.get(shipmentId) })
   const events = shipment?.events ?? []
@@ -90,11 +92,11 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
       </CardHeader>
       <CardContent>
         {showForm && (
-          <form onSubmit={handleAdd} className="mb-5 flex flex-col gap-3 rounded-md border border-[--color-border] bg-[--color-muted]/40 p-4">
+          <form onSubmit={handleAdd} className="mb-5 flex flex-col gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
             <div className="flex gap-2">
               {(["milestone", "note"] as const).map((kind) => (
                 <button key={kind} type="button" onClick={() => setForm((f) => ({ ...f, kind }))}
-                  className={["rounded-full px-3 py-1 text-xs font-medium transition-colors", form.kind === kind ? "bg-[--color-primary] text-white" : "bg-[--color-muted] text-[--color-muted-foreground]"].join(" ")}>
+                  className={["rounded-full px-3 py-1 text-xs font-medium transition-colors", form.kind === kind ? "bg-[var(--color-primary)] text-white" : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"].join(" ")}>
                   {kind === "milestone" ? "Hito" : "Nota libre"}
                 </button>
               ))}
@@ -118,7 +120,7 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
         )}
 
         {events.length === 0 ? (
-          <p className="py-6 text-center text-sm text-[--color-muted-foreground]">Sin eventos registrados.</p>
+          <p className="py-6 text-center text-sm text-[var(--color-muted-foreground)]">Sin eventos registrados.</p>
         ) : (
           <div className="relative flex flex-col">
             {events.map((event, idx) => {
@@ -126,27 +128,27 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
               const isLast = idx === events.length - 1
               return (
                 <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-                  {!isLast && <div className="absolute left-[15px] top-8 bottom-0 w-px bg-[--color-border]" />}
+                  {!isLast && <div className="absolute left-[15px] top-8 bottom-0 w-px bg-[var(--color-border)]" />}
                   <div className={["z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
-                    event.type === "status_change" ? "border-[--color-primary] bg-[--color-primary]/10 text-[--color-primary]"
-                      : event.type === "milestone" ? "border-[--color-accent] bg-[--color-accent]/10 text-[--color-accent]"
-                        : "border-[--color-border] bg-[--color-muted] text-[--color-muted-foreground]"].join(" ")}>
+                    event.type === "status_change" ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                      : event.type === "milestone" ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "border-[var(--color-border)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"].join(" ")}>
                     <Icon className="h-3.5 w-3.5" />
                   </div>
                   <div className="min-w-0 flex-1 pt-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-medium">{event.title}</p>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className="whitespace-nowrap text-xs text-[--color-muted-foreground]">{formatDateTime(event.occurredAt)}</span>
+                        <span className="whitespace-nowrap text-xs text-[var(--color-muted-foreground)]">{formatDateTime(event.occurredAt)}</span>
                         {canDelete && event.source !== "system" && (
-                          <button title="Eliminar evento" onClick={() => { if (confirm("¿Eliminar este evento de la bitácora?")) deleteMutation.mutate(event.id) }}
-                            className="rounded p-0.5 text-[--color-muted-foreground] hover:text-[--color-destructive]">
+                          <button title="Eliminar evento" onClick={async () => { if (await confirm("¿Eliminar este evento de la bitácora?")) deleteMutation.mutate(event.id) }}
+                            className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]">
                             <Trash2 className="h-3 w-3" />
                           </button>
                         )}
                       </div>
                     </div>
-                    {event.detail && <p className="mt-0.5 text-sm text-[--color-muted-foreground]">{event.detail}</p>}
+                    {event.detail && <p className="mt-0.5 text-sm text-[var(--color-muted-foreground)]">{event.detail}</p>}
                   </div>
                 </div>
               )

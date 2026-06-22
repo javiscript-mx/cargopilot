@@ -43,7 +43,7 @@ function EditCustomerPage() {
   if (isLoading || !customer) {
     return (
       <AppLayout>
-        <div className="flex h-40 items-center justify-center text-[--color-muted-foreground]">
+        <div className="flex h-40 items-center justify-center text-[var(--color-muted-foreground)]">
           Cargando...
         </div>
       </AppLayout>
@@ -53,7 +53,7 @@ function EditCustomerPage() {
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
         <h1 className="text-2xl font-bold">Editar cliente</h1>

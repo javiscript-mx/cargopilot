@@ -114,12 +114,12 @@ export function AddressInput({
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-sm font-medium text-[--color-foreground]">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-foreground)]">
           {label}
         </label>
       )}
       <div className="relative">
-        <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--color-muted-foreground]" />
+        <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
         <input
           ref={inputRef}
           id={id}
@@ -130,15 +130,15 @@ export function AddressInput({
           disabled={disabled || !ready}
           autoComplete="off"
           className={cn(
-            "w-full rounded-md border bg-[--color-background] py-2 pl-9 pr-3 text-sm",
-            "text-[--color-foreground] placeholder:text-[--color-muted-foreground]",
-            "focus:outline-none focus:ring-2 focus:ring-[--color-primary] focus:border-transparent",
+            "w-full rounded-md border bg-white py-2 pl-9 pr-3 text-sm",
+            "text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)]",
+            "focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            error ? "border-[--color-destructive]" : "border-[--color-border]",
+            error ? "border-[var(--color-destructive)]" : "border-[var(--color-border)]",
           )}
         />
       </div>
-      {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

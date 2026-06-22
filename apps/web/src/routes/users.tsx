@@ -62,7 +62,7 @@ function UsersPage() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Usuarios</h1>
-          <p className="text-[--color-muted-foreground]">{users.length} usuarios · {ROLES.length} roles</p>
+          <p className="text-[var(--color-muted-foreground)]">{users.length} usuarios · {ROLES.length} roles</p>
         </div>
         {canManage && tab === "usuarios" && (
           <Button className="flex items-center gap-2" onClick={() => setCreateOpen(true)}>
@@ -76,7 +76,7 @@ function UsersPage() {
         <CardContent className="p-0">
           {tab === "usuarios" ? (
             isLoading ? (
-              <div className="flex items-center justify-center py-12 text-[--color-muted-foreground]">Cargando...</div>
+              <div className="flex items-center justify-center py-12 text-[var(--color-muted-foreground)]">Cargando...</div>
             ) : (
               <UsersTable
                 users={users} selfId={selfId} canManage={canManage}
@@ -111,7 +111,7 @@ function UsersTable({ users, selfId, canManage, onEdit, onReset }: {
 }) {
   if (users.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--color-muted-foreground)]">
         <Users className="h-12 w-12 opacity-30" />
         <p>No hay usuarios</p>
       </div>
@@ -120,12 +120,12 @@ function UsersTable({ users, selfId, canManage, onEdit, onReset }: {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-[--color-border]">
-          <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Nombre</th>
-          <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Correo</th>
-          <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Rol</th>
-          <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Estado</th>
-          <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Alta</th>
+        <tr className="border-b border-[var(--color-border)]">
+          <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Nombre</th>
+          <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Correo</th>
+          <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Rol</th>
+          <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Estado</th>
+          <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Alta</th>
           {canManage && <th className="px-4 py-3" />}
         </tr>
       </thead>
@@ -133,19 +133,19 @@ function UsersTable({ users, selfId, canManage, onEdit, onReset }: {
         {users.map((u) => {
           const role = (u.role in ROLE_LABELS ? u.role : "viewer") as Role
           return (
-            <tr key={u.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/50">
+            <tr key={u.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-muted)]/50">
               <td className="px-4 py-3 font-medium">
                 {u.name}
-                {u.id === selfId && <span className="ml-2 text-xs text-[--color-muted-foreground]">(tú)</span>}
+                {u.id === selfId && <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">(tú)</span>}
               </td>
-              <td className="px-4 py-3 text-[--color-muted-foreground]">{u.email}</td>
+              <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{u.email}</td>
               <td className="px-4 py-3"><Badge variant={ROLE_BADGE[role]}>{ROLE_LABELS[role]}</Badge></td>
               <td className="px-4 py-3">
                 {u.active
                   ? <Badge variant="success">Activo</Badge>
                   : <Badge variant="outline">Inactivo</Badge>}
               </td>
-              <td className="px-4 py-3 text-[--color-muted-foreground]">{new Date(u.createdAt).toLocaleDateString("es-MX")}</td>
+              <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{new Date(u.createdAt).toLocaleDateString("es-MX")}</td>
               {canManage && (
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
@@ -181,9 +181,9 @@ function RolesMatrix() {
     <div className="flex flex-col gap-4 p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {ROLES.map((r) => (
-          <div key={r} className="rounded-md border border-[--color-border] p-3">
+          <div key={r} className="rounded-md border border-[var(--color-border)] p-3">
             <Badge variant={ROLE_BADGE[r]}>{ROLE_LABELS[r]}</Badge>
-            <p className="mt-1.5 text-xs text-[--color-muted-foreground]">{ROLE_DESCRIPTIONS[r]}</p>
+            <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">{ROLE_DESCRIPTIONS[r]}</p>
           </div>
         ))}
       </div>
@@ -191,10 +191,10 @@ function RolesMatrix() {
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
-            <tr className="border-b border-[--color-border]">
-              <th className="px-3 py-2 text-left font-medium text-[--color-muted-foreground]">Privilegio</th>
+            <tr className="border-b border-[var(--color-border)]">
+              <th className="px-3 py-2 text-left font-medium text-[var(--color-muted-foreground)]">Privilegio</th>
               {ROLES.map((r) => (
-                <th key={r} className="px-3 py-2 text-center font-medium text-[--color-muted-foreground]">{ROLE_LABELS[r]}</th>
+                <th key={r} className="px-3 py-2 text-center font-medium text-[var(--color-muted-foreground)]">{ROLE_LABELS[r]}</th>
               ))}
             </tr>
           </thead>
@@ -212,20 +212,20 @@ function RolesMatrix() {
 function PermissionGroup({ module, perms }: { module: string; perms: Permission[] }) {
   return (
     <>
-      <tr className="bg-[--color-muted]/40">
-        <td colSpan={ROLES.length + 1} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">{module}</td>
+      <tr className="bg-[var(--color-muted)]/40">
+        <td colSpan={ROLES.length + 1} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{module}</td>
       </tr>
       {perms.map((p) => (
-        <tr key={p} className="border-b border-[--color-border] last:border-0">
+        <tr key={p} className="border-b border-[var(--color-border)] last:border-0">
           <td className="px-3 py-2">
             <span className="font-medium">{PERMISSION_META[p].label}</span>
-            <span className="block text-xs text-[--color-muted-foreground]">{PERMISSION_META[p].description}</span>
+            <span className="block text-xs text-[var(--color-muted-foreground)]">{PERMISSION_META[p].description}</span>
           </td>
           {ROLES.map((r) => (
             <td key={r} className="px-3 py-2 text-center">
               {roleHasPermission(r, p)
                 ? <Check className="mx-auto h-4 w-4 text-green-600" />
-                : <span className="text-[--color-muted-foreground]">—</span>}
+                : <span className="text-[var(--color-muted-foreground)]">—</span>}
             </td>
           ))}
         </tr>
@@ -281,7 +281,7 @@ function CreateUserDrawer({ open, onClose, onDone }: { open: boolean; onClose: (
         <Input id="password" label="Contraseña temporal" type="text" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} error={errors["password"]} placeholder="Mínimo 8 caracteres" />
         <div>
           <Select id="role" label="Rol" options={ROLE_OPTIONS} value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))} />
-          <p className="mt-1 text-xs text-[--color-muted-foreground]">{ROLE_DESCRIPTIONS[form.role]}</p>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{ROLE_DESCRIPTIONS[form.role]}</p>
         </div>
       </form>
     </Drawer>
@@ -329,16 +329,16 @@ function EditUserDrawer({ user, isSelf, onClose, onDone, onResetPassword }: {
         <Input id="edit-name" label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
         <div>
           <Select id="edit-role" label="Rol" options={ROLE_OPTIONS} value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={isSelf} />
-          <p className="mt-1 text-xs text-[--color-muted-foreground]">
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
             {isSelf ? "No puedes cambiar tu propio rol." : ROLE_DESCRIPTIONS[role]}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={active} disabled={isSelf} onChange={(e) => setActive(e.target.checked)} />
           Cuenta activa
-          {isSelf && <span className="text-xs text-[--color-muted-foreground]">(no puedes desactivarte)</span>}
+          {isSelf && <span className="text-xs text-[var(--color-muted-foreground)]">(no puedes desactivarte)</span>}
         </label>
-        <div className="border-t border-[--color-border] pt-4">
+        <div className="border-t border-[var(--color-border)] pt-4">
           <Button type="button" variant="outline" className="flex items-center gap-1.5" onClick={() => onResetPassword(user)}>
             <KeyRound className="h-3.5 w-3.5" /> Restablecer contraseña
           </Button>
@@ -381,7 +381,7 @@ function ResetPasswordDrawer({ user, onClose }: { user: UserResponse | null; onC
       }
     >
       <form id="reset-pw-form" onSubmit={submit} className="flex flex-col gap-3">
-        <p className="text-sm text-[--color-muted-foreground]">
+        <p className="text-sm text-[var(--color-muted-foreground)]">
           Define una contraseña temporal. Al guardar se cerrarán las sesiones activas del usuario y deberá entrar con la nueva contraseña.
         </p>
         <Input id="new-password" label="Nueva contraseña" type="text" value={password} onChange={(e) => setPassword(e.target.value)} error={error} placeholder="Mínimo 8 caracteres" />

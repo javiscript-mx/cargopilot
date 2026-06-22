@@ -17,7 +17,7 @@ import { validateRfc, validateEmail, validatePhone, validateRequired, collectErr
 
 const EMPTY_FORM = {
   name: "", type: "carrier" as Supplier["type"],
-  rfc: "", email: "", phone: "", contact: "", notes: "", address: "",
+  rfc: "", email: "", phone: "", contact: "", notes: "", address: "", creditTermsDays: "",
 }
 
 interface Props {
@@ -42,6 +42,7 @@ export function SupplierForm({ mode, supplier }: Props) {
           contact: supplier.contact ?? "",
           notes: supplier.notes ?? "",
           address: (supplier.address as { formatted?: string } | null)?.formatted ?? "",
+          creditTermsDays: supplier.creditTermsDays != null ? String(supplier.creditTermsDays) : "",
         }
       : EMPTY_FORM,
   )
@@ -115,6 +116,7 @@ export function SupplierForm({ mode, supplier }: Props) {
       contact: form.contact || null,
       notes: form.notes || null,
       address: addressDetail ?? (form.address ? { formatted: form.address } : null),
+      creditTermsDays: form.creditTermsDays.trim() ? Number(form.creditTermsDays) : null,
       active: supplier?.active ?? true,
     }
 
@@ -131,7 +133,7 @@ export function SupplierForm({ mode, supplier }: Props) {
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/suppliers" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/suppliers" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Proveedores
         </Link>
         <h1 className="text-2xl font-bold">
@@ -139,15 +141,15 @@ export function SupplierForm({ mode, supplier }: Props) {
         </h1>
       </div>
 
-      <div className="flex max-w-2xl flex-col gap-4">
+      <div className="flex max-w-4xl flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle>{mode === "edit" ? supplier?.name : "Datos del proveedor"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Input id="name" label="Nombre" {...s("name")} error={errors["name"]} className="col-span-2 sm:col-span-1" />
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Input id="name" label="Nombre" {...s("name")} error={errors["name"]} className="lg:col-span-2" />
               <Select
                 id="type" label="Tipo"
                 options={typeOptions}
@@ -155,17 +157,14 @@ export function SupplierForm({ mode, supplier }: Props) {
                 {...s("type")}
                 error={errors["type"]}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <Input id="rfc" label="RFC (opcional)" {...s("rfc")}
                 onChange={(e) => setForm((f) => ({ ...f, rfc: e.target.value.toUpperCase() }))}
                 error={errors["rfc"]} maxLength={13} placeholder="ABC010101XYZ"
               />
               <Input id="contact" label="Persona de contacto (opcional)" {...s("contact")} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <Input id="phone" label="Teléfono (opcional)" {...s("phone")} error={errors["phone"]} />
-              <Input id="email" label="Correo (opcional)" type="email" {...s("email")} error={errors["email"]} />
+              <Input id="email" label="Correo (opcional)" type="email" {...s("email")} error={errors["email"]} className="sm:col-span-2 lg:col-span-2" />
+              <Input id="creditTermsDays" type="number" min={0} label="Días de crédito (opcional)" placeholder="0 = contado" {...s("creditTermsDays")} />
             </div>
             <AddressInput
               id="address" label="Dirección (opcional)"

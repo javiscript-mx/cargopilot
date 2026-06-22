@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { operatorsApi, OPERATOR_STATUS_LABELS, type OperatorStatus } from "@/api/operators"
 import { useCan } from "@/lib/permissions"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 import { validateRequired, validateRfc, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY = { name: "", rfc: "", licenseNumber: "" }
@@ -18,6 +19,7 @@ const SEARCH_THRESHOLD = 5
 export function OperatorsSection({ supplierId }: { supplierId: string }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const { can } = useCan()
   const canManage = can("suppliers.write")
 
@@ -93,17 +95,17 @@ export function OperatorsSection({ supplierId }: { supplierId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         {operators.length > SEARCH_THRESHOLD ? (
           <div className="relative min-w-0 flex-1 sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--color-muted-foreground]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nombre, RFC o licencia..."
-              className="w-full rounded-md border border-[--color-border] bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[--color-primary]"
+              className="w-full rounded-md border border-[var(--color-border)] bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             />
           </div>
         ) : (
-          <span className="text-sm text-[--color-muted-foreground]">
+          <span className="text-sm text-[var(--color-muted-foreground)]">
             {operators.length} {operators.length === 1 ? "operador registrado" : "operadores registrados"}
           </span>
         )}
@@ -134,11 +136,11 @@ export function OperatorsSection({ supplierId }: { supplierId: string }) {
       </Drawer>
 
       {operators.length === 0 ? (
-        <p className="py-6 text-center text-sm text-[--color-muted-foreground]">Sin operadores registrados.</p>
+        <p className="py-6 text-center text-sm text-[var(--color-muted-foreground)]">Sin operadores registrados.</p>
       ) : filtered.length === 0 ? (
-        <p className="py-6 text-center text-sm text-[--color-muted-foreground]">Sin resultados para la búsqueda.</p>
+        <p className="py-6 text-center text-sm text-[var(--color-muted-foreground)]">Sin resultados para la búsqueda.</p>
       ) : (
-        <div className="flex max-h-[480px] flex-col divide-y divide-[--color-border] overflow-y-auto">
+        <div className="flex max-h-[480px] flex-col divide-y divide-[var(--color-border)] overflow-y-auto">
           {filtered.map((o) => {
             const st = OPERATOR_STATUS_LABELS[o.status]
             return (
@@ -148,7 +150,7 @@ export function OperatorsSection({ supplierId }: { supplierId: string }) {
                     <span className="font-medium">{o.name}</span>
                     <Badge variant={st.variant}>{st.label}</Badge>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[--color-muted-foreground]">
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[var(--color-muted-foreground)]">
                     {o.rfc && <span>RFC: {o.rfc}</span>}
                     {o.licenseNumber && <span>Licencia: {o.licenseNumber}</span>}
                   </div>
@@ -169,8 +171,8 @@ export function OperatorsSection({ supplierId }: { supplierId: string }) {
                     )}
                     <button
                       title="Dar de baja"
-                      onClick={() => { if (confirm(`¿Dar de baja al operador ${o.name}?`)) deleteMutation.mutate(o.id) }}
-                      className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                      onClick={async () => { if (await confirm(`¿Dar de baja al operador ${o.name}?`)) deleteMutation.mutate(o.id) }}
+                      className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)]"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

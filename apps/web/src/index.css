@@ -25,14 +25,35 @@
   --radius: 0.5rem;
 }
 
-* {
-  border-color: var(--color-border);
+/* Color de borde por defecto — en @layer base para que las utilidades de Tailwind
+   (border-[var(--color-destructive)], etc.) lo puedan sobreescribir. Sin el layer,
+   esta regla global ganaba siempre y los bordes de error nunca se ponían rojos. */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ── Cursor de "mano" en todo lo accionable (botones, links, tabs, selects) ──
+   Sin esto muchos controles parecían texto plano y no se sentían clickeables. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="tab"],
+a[href],
+label[for],
+select:not(:disabled),
+summary {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 /* ── Animaciones (drawer / overlays) ── */

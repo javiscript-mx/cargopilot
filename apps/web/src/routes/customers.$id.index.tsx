@@ -85,7 +85,7 @@ function CustomerDetailPage() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center py-20 text-[--color-muted-foreground]">Cargando...</div>
+        <div className="flex items-center justify-center py-20 text-[var(--color-muted-foreground)]">Cargando...</div>
       </AppLayout>
     )
   }
@@ -95,7 +95,7 @@ function CustomerDetailPage() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <Building2 className="h-12 w-12 opacity-30" />
-          <p className="text-[--color-muted-foreground]">Cliente no encontrado</p>
+          <p className="text-[var(--color-muted-foreground)]">Cliente no encontrado</p>
           <Link to="/customers"><Button variant="outline">Volver</Button></Link>
         </div>
       </AppLayout>
@@ -130,7 +130,7 @@ function CustomerDetailPage() {
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -149,7 +149,7 @@ function CustomerDetailPage() {
           )}
         </div>
         {c.legalName && c.legalName !== c.name && (
-          <p className="mt-1 text-sm text-[--color-muted-foreground]">{c.legalName}</p>
+          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{c.legalName}</p>
         )}
       </div>
 
@@ -163,23 +163,23 @@ function CustomerDetailPage() {
                 c.shipments.length === 0 ? (
                   <Empty icon={<Package className="h-8 w-8 opacity-30" />} text="Sin expedientes" />
                 ) : (
-                  <ul className="divide-y divide-[--color-border]">
+                  <ul className="divide-y divide-[var(--color-border)]">
                     {c.shipments.map((s) => {
                       const st = SHIPMENT_STATUS[s.status as keyof typeof SHIPMENT_STATUS] ?? SHIPMENT_STATUS.draft
                       return (
                         <li key={s.id}>
-                          <Link to="/shipments/$id" params={{ id: s.id }} className="flex items-center justify-between gap-3 py-2.5 hover:bg-[--color-muted]/40">
+                          <Link to="/shipments/$id" params={{ id: s.id }} className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--color-muted)]/40">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-sm font-medium">{s.folio}</span>
                                 <Badge variant={st.variant}>{st.label}</Badge>
                               </div>
-                              <p className="truncate text-xs text-[--color-muted-foreground]">
+                              <p className="truncate text-xs text-[var(--color-muted-foreground)]">
                                 {serviceLabel(s.operationType)}
                                 {(s.origin || s.destination) && ` · ${[s.origin, s.destination].filter(Boolean).join(" → ")}`}
                               </p>
                             </div>
-                            <span className="shrink-0 text-xs text-[--color-muted-foreground]">{new Date(s.createdAt).toLocaleDateString("es-MX")}</span>
+                            <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">{new Date(s.createdAt).toLocaleDateString("es-MX")}</span>
                           </Link>
                         </li>
                       )
@@ -192,7 +192,7 @@ function CustomerDetailPage() {
                 c.invoices.length === 0 ? (
                   <Empty icon={<FileText className="h-8 w-8 opacity-30" />} text="Sin facturas" />
                 ) : (
-                  <ul className="divide-y divide-[--color-border]">
+                  <ul className="divide-y divide-[var(--color-border)]">
                     {c.invoices.map((inv) => {
                       const st = INVOICE_STATUS[inv.status] ?? INVOICE_STATUS["draft"]!
                       return (
@@ -202,7 +202,7 @@ function CustomerDetailPage() {
                               <span className="font-mono text-sm font-medium">{inv.series}-{inv.folio}</span>
                               <Badge variant={st.variant}>{st.label}</Badge>
                             </div>
-                            <p className="text-xs text-[--color-muted-foreground]">
+                            <p className="text-xs text-[var(--color-muted-foreground)]">
                               {new Date(inv.stampedAt ?? inv.createdAt).toLocaleDateString("es-MX")}
                             </p>
                           </div>
@@ -210,7 +210,7 @@ function CustomerDetailPage() {
                             <span className="text-sm font-medium">{money(inv.total, c.creditCurrency)}</span>
                             {inv.status === "stamped" && (
                               <a href={invoicesApi.pdfUrl(inv.id)} target="_blank" rel="noreferrer" title="Descargar PDF"
-                                 className="rounded p-1.5 text-[--color-muted-foreground] hover:bg-[--color-muted] hover:text-[--color-foreground]">
+                                 className="rounded p-1.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                                 <FileText className="h-4 w-4" />
                               </a>
                             )}
@@ -241,10 +241,10 @@ function CustomerDetailPage() {
               {limit !== null && (
                 <Row
                   label="Disponible"
-                  value={<span className={overLimit ? "text-[--color-destructive]" : "text-green-600"}>{money(available, c.creditCurrency)}</span>}
+                  value={<span className={overLimit ? "text-[var(--color-destructive)]" : "text-green-600"}>{money(available, c.creditCurrency)}</span>}
                 />
               )}
-              <p className="mt-1 text-xs text-[--color-muted-foreground]">
+              <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                 "Facturado vigente" suma facturas timbradas no canceladas; aún no descuenta pagos.
               </p>
             </CardContent>
@@ -279,17 +279,17 @@ function CustomerDetailPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Contactos</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               {contacts.length === 0 ? (
-                <p className="text-[--color-muted-foreground]">Sin contactos</p>
+                <p className="text-[var(--color-muted-foreground)]">Sin contactos</p>
               ) : contacts.map((ct: CustomerContact, i) => (
-                <div key={ct.id ?? i} className="flex flex-col gap-0.5 border-b border-[--color-border] pb-2 last:border-0 last:pb-0">
+                <div key={ct.id ?? i} className="flex flex-col gap-0.5 border-b border-[var(--color-border)] pb-2 last:border-0 last:pb-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium">{ct.name}</span>
                     {ct.isPrimary && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                     <Badge variant="outline">{CONTACT_TYPE[ct.type] ?? ct.type}</Badge>
                   </div>
-                  {ct.position && <span className="text-xs text-[--color-muted-foreground]">{ct.position}</span>}
-                  {ct.email && <span className="flex items-center gap-1.5 text-xs text-[--color-muted-foreground]"><Mail className="h-3 w-3" /> {ct.email}</span>}
-                  {(ct.phone || ct.mobile) && <span className="flex items-center gap-1.5 text-xs text-[--color-muted-foreground]"><Phone className="h-3 w-3" /> {[ct.phone, ct.mobile].filter(Boolean).join(" · ")}</span>}
+                  {ct.position && <span className="text-xs text-[var(--color-muted-foreground)]">{ct.position}</span>}
+                  {ct.email && <span className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]"><Mail className="h-3 w-3" /> {ct.email}</span>}
+                  {(ct.phone || ct.mobile) && <span className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]"><Phone className="h-3 w-3" /> {[ct.phone, ct.mobile].filter(Boolean).join(" · ")}</span>}
                 </div>
               ))}
             </CardContent>
@@ -300,15 +300,15 @@ function CustomerDetailPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Direcciones</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               {addresses.length === 0 ? (
-                <p className="text-[--color-muted-foreground]">Sin direcciones</p>
+                <p className="text-[var(--color-muted-foreground)]">Sin direcciones</p>
               ) : addresses.map((a: CustomerAddress, i) => (
-                <div key={a.id ?? i} className="flex flex-col gap-0.5 border-b border-[--color-border] pb-2 last:border-0 last:pb-0">
+                <div key={a.id ?? i} className="flex flex-col gap-0.5 border-b border-[var(--color-border)] pb-2 last:border-0 last:pb-0">
                   <div className="flex items-center gap-1.5">
                     <Badge variant="outline">{ADDRESS_TYPE[a.type] ?? a.type}</Badge>
-                    {a.label && <span className="text-xs text-[--color-muted-foreground]">{a.label}</span>}
+                    {a.label && <span className="text-xs text-[var(--color-muted-foreground)]">{a.label}</span>}
                     {a.isPrimary && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                   </div>
-                  <span className="flex items-start gap-1.5 text-xs text-[--color-muted-foreground]">
+                  <span className="flex items-start gap-1.5 text-xs text-[var(--color-muted-foreground)]">
                     <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.formatted ?? "—"}
                   </span>
                 </div>
@@ -324,7 +324,7 @@ function CustomerDetailPage() {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="shrink-0 text-[--color-muted-foreground]">{label}</span>
+      <span className="shrink-0 text-[var(--color-muted-foreground)]">{label}</span>
       <span className="min-w-0 text-right font-medium">{value}</span>
     </div>
   )
@@ -332,7 +332,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Empty({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-10 text-[--color-muted-foreground]">
+    <div className="flex flex-col items-center justify-center gap-2 py-10 text-[var(--color-muted-foreground)]">
       {icon}
       <p className="text-sm">{text}</p>
     </div>

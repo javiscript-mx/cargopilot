@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
+import { useMemo, useState } from "react"
 import { Package, Building2, FileText, TrendingUp, ArrowRight, CircleDashed } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,13 +24,13 @@ function StatCard({ title, value, icon: Icon, description }: {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-[--color-muted-foreground]">{title}</CardTitle>
-          <Icon className="h-4 w-4 text-[--color-muted-foreground]" />
+          <CardTitle className="text-sm font-medium text-[var(--color-muted-foreground)]">{title}</CardTitle>
+          <Icon className="h-4 w-4 text-[var(--color-muted-foreground)]" />
         </div>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-bold">{value}</p>
-        {description && <p className="mt-1 text-xs text-[--color-muted-foreground]">{description}</p>}
+        {description && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{description}</p>}
       </CardContent>
     </Card>
   )
@@ -59,11 +60,37 @@ function DashboardPage() {
 
   const opLabel = (code: string) => operationTypes.find((t) => t.code === code)?.name ?? code
 
-  const activeShipments = shipments.filter((s) => !["delivered", "cancelled"].includes(s.status))
-  const inProgress = shipments.filter((s) => s.status === "in_transit")
-  const drafts = shipments.filter((s) => s.status === "draft")
-  const stampedInvoices = invoices.filter((i) => i.status === "stamped")
+  // ── Filtro por mes(es) — default: mes actual. Permite uno o varios meses. ──
+  const monthOptions = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      return {
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
+      }
+    })
+  }, [])
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(() => new Set([monthOptions[0]!.value]))
+  const toggleMonth = (v: string) =>
+    setSelectedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(v)) next.delete(v)
+      else next.add(v)
+      return next
+    })
+  // Sin selección = todos los meses
+  const inPeriod = (iso: string) => selectedMonths.size === 0 || selectedMonths.has(iso.slice(0, 7))
+
+  const periodShipments = shipments.filter((s) => inPeriod(s.createdAt))
+  const periodInvoices = invoices.filter((i) => inPeriod(i.createdAt))
+
+  const activeShipments = periodShipments.filter((s) => !["delivered", "cancelled"].includes(s.status))
+  const inProgress = periodShipments.filter((s) => s.status === "in_transit")
+  const drafts = periodShipments.filter((s) => s.status === "draft")
+  const stampedInvoices = periodInvoices.filter((i) => i.status === "stamped")
   const totalBilled = stampedInvoices.reduce((acc, i) => acc + parseFloat(i.total), 0)
+  const recentShipments = [...periodShipments].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
 
   // Mix de operaciones activas por tipo — impo, expo, servicios, todo cuenta igual
   const byType = activeShipments.reduce<Record<string, number>>((acc, s) => {
@@ -77,9 +104,31 @@ function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-[--color-muted-foreground]">Resumen de operaciones</p>
+      <div className="mb-6 flex flex-col gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-[var(--color-muted-foreground)]">Resumen de operaciones</p>
+        </div>
+        {/* Filtro de meses: default mes actual; toca para sumar/quitar meses */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-[var(--color-muted-foreground)]">Periodo:</span>
+          {monthOptions.map((m) => {
+            const on = selectedMonths.has(m.value)
+            return (
+              <button key={m.value} type="button" onClick={() => toggleMonth(m.value)}
+                className={on
+                  ? "rounded-full bg-[var(--color-primary)] px-2.5 py-1 text-xs font-medium capitalize text-white"
+                  : "rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-xs font-medium capitalize text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]"}>
+                {m.label}
+              </button>
+            )
+          })}
+          {selectedMonths.size > 0 && (
+            <button type="button" onClick={() => setSelectedMonths(new Set())} className="ml-1 text-xs text-[var(--color-primary)] hover:underline">
+              Todos
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -114,7 +163,7 @@ function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Operaciones recientes</CardTitle>
-              <Link to="/shipments" className="text-sm text-[--color-primary] hover:underline">
+              <Link to="/shipments" className="text-sm text-[var(--color-primary)] hover:underline">
                 Ver todas
               </Link>
             </div>
@@ -122,27 +171,27 @@ function DashboardPage() {
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[--color-border]">
-                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Folio</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Operación</th>
-                  <th className="hidden px-4 py-2.5 text-left font-medium text-[--color-muted-foreground] md:table-cell">Cliente</th>
-                  <th className="hidden px-4 py-2.5 text-left font-medium text-[--color-muted-foreground] xl:table-cell">Ruta / Referencia</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-[--color-muted-foreground]">Estado</th>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th className="px-4 py-2.5 text-left font-medium text-[var(--color-muted-foreground)]">Folio</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-[var(--color-muted-foreground)]">Operación</th>
+                  <th className="hidden px-4 py-2.5 text-left font-medium text-[var(--color-muted-foreground)] md:table-cell">Cliente</th>
+                  <th className="hidden px-4 py-2.5 text-left font-medium text-[var(--color-muted-foreground)] xl:table-cell">Ruta / Referencia</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-[var(--color-muted-foreground)]">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {shipments.slice(0, 8).map((s) => {
+                {recentShipments.slice(0, 8).map((s) => {
                   const status = STATUS_CONFIG[s.status] ?? { label: s.status, variant: "outline" as const }
                   return (
-                    <tr key={s.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/40">
+                    <tr key={s.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-muted)]/40">
                       <td className="px-4 py-2.5">
-                        <Link to="/shipments/$id" params={{ id: s.id }} className="font-mono font-medium text-[--color-primary] hover:underline">
+                        <Link to="/shipments/$id" params={{ id: s.id }} className="font-mono font-medium text-[var(--color-primary)] hover:underline">
                           {s.folio}
                         </Link>
                       </td>
                       <td className="px-4 py-2.5">{opLabel(s.operationType)}</td>
                       <td className="hidden px-4 py-2.5 md:table-cell">{s.customer.name}</td>
-                      <td className="hidden px-4 py-2.5 text-[--color-muted-foreground] xl:table-cell">
+                      <td className="hidden px-4 py-2.5 text-[var(--color-muted-foreground)] xl:table-cell">
                         {operationContext(s)}
                       </td>
                       <td className="px-4 py-2.5">
@@ -151,10 +200,10 @@ function DashboardPage() {
                     </tr>
                   )
                 })}
-                {shipments.length === 0 && (
+                {recentShipments.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-[--color-muted-foreground]">
-                      No hay operaciones aún
+                    <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-muted-foreground)]">
+                      No hay operaciones en el periodo seleccionado
                     </td>
                   </tr>
                 )}
@@ -170,7 +219,7 @@ function DashboardPage() {
           </CardHeader>
           <CardContent>
             {typeBreakdown.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-[--color-muted-foreground]">
+              <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-muted-foreground)]">
                 <CircleDashed className="h-8 w-8 opacity-30" />
                 <p className="text-sm">Sin operaciones activas</p>
               </div>
@@ -182,9 +231,9 @@ function DashboardPage() {
                       <span>{label}</span>
                       <span className="font-semibold tabular-nums">{count}</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[--color-muted]">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-muted)]">
                       <div
-                        className="h-full rounded-full bg-[--color-primary]"
+                        className="h-full rounded-full bg-[var(--color-primary)]"
                         style={{ width: `${(count / maxTypeCount) * 100}%` }}
                       />
                     </div>

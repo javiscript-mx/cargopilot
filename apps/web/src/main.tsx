@@ -6,11 +6,16 @@ import "./index.css"
 
 import { routeTree } from "./routeTree.gen"
 import { ToastProvider } from "@/components/ui/toast"
+import { ConfirmProvider } from "@/components/ui/confirm"
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60, // 1 minuto
+      // staleTime 0 ⇒ los datos se revalidan al montar (al navegar a una vista),
+      // así un dato que completaste en otra pantalla ya se ve al volver (sin "borrar cache").
+      // Los catálogos/settings ponen su propio staleTime alto y no se ven afectados.
+      staleTime: 0,
+      refetchOnWindowFocus: false,
       retry: 1,
     },
   },
@@ -29,7 +34,9 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <RouterProvider router={router} />
+        <ConfirmProvider>
+          <RouterProvider router={router} />
+        </ConfirmProvider>
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,

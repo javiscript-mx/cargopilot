@@ -4,7 +4,7 @@ import { prisma } from "../db/client.js"
 import { requireAuth, requirePermission } from "../middleware/require-auth.js"
 import { uploadObject, getSignedUrl, streamObject, deleteObject, getStorageStatus } from "../lib/storage.js"
 
-const ENTITY_TYPES = new Set(["customer", "supplier", "shipment", "invoice"])
+const ENTITY_TYPES = new Set(["customer", "supplier", "shipment", "invoice", "expense"])
 
 // Tipos de documento típicos en operación de forwarding:
 // constancia fiscal (CSF), comprobante de domicilio, contratos, pólizas, BL, facturas, etc.
@@ -54,6 +54,8 @@ export async function documentsRoutes(app: FastifyInstance) {
       const fields = file.fields as Record<string, { value?: string } | undefined>
       const entityType = fields["entityType"]?.value
       const entityId = fields["entityId"]?.value
+      const kind = fields["kind"]?.value || null
+      const notes = fields["notes"]?.value?.trim() || null
 
       if (!entityType || !ENTITY_TYPES.has(entityType)) {
         return reply.status(400).send({ error: "entityType inválido" })
@@ -74,6 +76,7 @@ export async function documentsRoutes(app: FastifyInstance) {
         entityType === "customer" ? await prisma.customer.findUnique({ where: { id: entityId } })
         : entityType === "supplier" ? await prisma.supplier.findUnique({ where: { id: entityId } })
         : entityType === "shipment" ? await prisma.shipment.findUnique({ where: { id: entityId } })
+        : entityType === "expense" ? await prisma.shipmentExpense.findUnique({ where: { id: entityId } })
         : await prisma.invoice.findUnique({ where: { id: entityId } })
       if (!exists) return reply.status(404).send({ error: "Entidad no encontrada" })
 
@@ -93,6 +96,8 @@ export async function documentsRoutes(app: FastifyInstance) {
         data: {
           entityType,
           entityId,
+          kind,
+          notes,
           originalName: file.filename,
           mimeType: file.mimetype,
           size: buffer.length,

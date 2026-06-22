@@ -29,12 +29,13 @@ function CustomersPage() {
   const { can } = useCan()
   const canWrite = can("customers.write")
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["customers", { page, search: debouncedSearch }],
-    queryFn: () => customersApi.listPaged({ page, pageSize: PAGE_SIZE, search: debouncedSearch }),
+    queryKey: ["customers", { page, pageSize, search: debouncedSearch }],
+    queryFn: () => customersApi.listPaged({ page, pageSize, search: debouncedSearch }),
     placeholderData: keepPreviousData,
   })
   const customers = data?.data ?? []
@@ -50,7 +51,7 @@ function CustomersPage() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Clientes</h1>
-          <p className="text-[--color-muted-foreground]">{total} clientes registrados</p>
+          <p className="text-[var(--color-muted-foreground)]">{total} clientes registrados</p>
         </div>
         {canWrite && (
           <Link to="/customers/new" className="w-full sm:w-auto">
@@ -66,9 +67,9 @@ function CustomersPage() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-[--color-muted-foreground]">Cargando...</div>
+            <div className="flex items-center justify-center py-12 text-[var(--color-muted-foreground)]">Cargando...</div>
           ) : customers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--color-muted-foreground)]">
               <Building2 className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay clientes registrados"}</p>
               {!debouncedSearch && canWrite && <Link to="/customers/new"><Button><Plus className="h-4 w-4" /> Agregar primer cliente</Button></Link>}
@@ -76,32 +77,32 @@ function CustomersPage() {
           ) : (
             <>
               {/* Mobile: tarjetas apiladas */}
-              <ul className="divide-y divide-[--color-border] md:hidden">
+              <ul className="divide-y divide-[var(--color-border)] md:hidden">
                 {customers.map((c) => (
                   <li key={c.id}>
                     <Link
                       to="/customers/$id"
                       params={{ id: c.id }}
-                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[--color-muted]/50"
+                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--color-muted)]/50"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium">{c.name}</p>
                         {c.legalName && c.legalName !== c.name && (
-                          <p className="truncate text-xs text-[--color-muted-foreground]">{c.legalName}</p>
+                          <p className="truncate text-xs text-[var(--color-muted-foreground)]">{c.legalName}</p>
                         )}
-                        <p className="font-mono text-xs text-[--color-muted-foreground]">{c.rfc}</p>
+                        <p className="font-mono text-xs text-[var(--color-muted-foreground)]">{c.rfc}</p>
                         <div className="mt-1">
                           <Badge variant={(statusConfig[c.status] ?? fallbackStatus).variant}>
                             {(statusConfig[c.status] ?? fallbackStatus).label}
                           </Badge>
                         </div>
                         {(c.email || c.phone) && (
-                          <p className="mt-0.5 truncate text-xs text-[--color-muted-foreground]">
+                          <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
                             {[c.email, c.phone].filter(Boolean).join(" · ")}
                           </p>
                         )}
                       </div>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
                     </Link>
                   </li>
                 ))}
@@ -110,33 +111,33 @@ function CustomersPage() {
               {/* Desktop: tabla */}
               <table className="hidden w-full text-sm md:table">
               <thead>
-                <tr className="border-b border-[--color-border]">
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Nombre</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Razón social</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">RFC</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Correo</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Teléfono</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Estatus</th>
-                  <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Alta</th>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Nombre</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Razón social</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">RFC</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Correo</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Teléfono</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Estatus</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Alta</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {customers.map((c) => (
-                  <tr key={c.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/50">
+                  <tr key={c.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-muted)]/50">
                     <td className="px-4 py-3 font-medium">
                       <Link to="/customers/$id" params={{ id: c.id }} className="hover:underline">{c.name}</Link>
                     </td>
-                    <td className="px-4 py-3 text-[--color-muted-foreground]">{c.legalName ?? "—"}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{c.legalName ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs">{c.rfc}</td>
-                    <td className="px-4 py-3 text-[--color-muted-foreground]">{c.email ?? "—"}</td>
-                    <td className="px-4 py-3 text-[--color-muted-foreground]">{c.phone ?? "—"}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{c.email ?? "—"}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{c.phone ?? "—"}</td>
                     <td className="px-4 py-3">
                       <Badge variant={(statusConfig[c.status] ?? fallbackStatus).variant}>
                         {(statusConfig[c.status] ?? fallbackStatus).label}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-[--color-muted-foreground]">
+                    <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {new Date(c.createdAt).toLocaleDateString("es-MX")}
                     </td>
                     <td className="px-4 py-3">
@@ -155,7 +156,7 @@ function CustomersPage() {
             </>
           )}
           {total > 0 && (
-            <PaginationBar page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
+            <PaginationBar page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1) }} />
           )}
         </CardContent>
       </Card>

@@ -4,12 +4,13 @@ import type { ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { AddressInput, type AddressValue } from "@/components/ui/address-input"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
-import { personaType, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona } from "@/lib/fiscal"
+import { personaType, personaFromRfc, PERSONA_LABEL, FORWARDING_CFDI_USES, cfdiUseAppliesToPersona, regimeAppliesToPersona } from "@/lib/fiscal"
 import { validateCp, validateEmail, validatePhone, validateRequired, validateRfc, collectErrors, scrollToFirstError } from "@/lib/validators"
 import type { Customer, CustomerPayload } from "@/api/customers"
 
@@ -225,7 +226,7 @@ function initialState(customer?: Customer): FormState {
 }
 
 export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, children, highlight }: CustomerMasterFormProps) {
-  const { items: regimenItems, options: regimenOptions } = useCatalog("sat_tax_regime")
+  const { items: regimenItems } = useCatalog("sat_tax_regime")
   const { items: cfdiUseItems } = useCatalog("sat_cfdi_use")
   const { options: paymentFormOptions } = useCatalog("sat_payment_form")
   const { options: paymentMethodOptions } = useCatalog("sat_payment_method")
@@ -244,7 +245,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
   useEffect(() => {
     if (!highlightLabels.length) return
     const t = setTimeout(() => {
-      document.querySelector(".text-\\[--color-destructive\\]")?.scrollIntoView({ behavior: "smooth", block: "center" })
+      document.querySelector(".text-\\[var\\(--color-destructive\\)\\]")?.scrollIntoView({ behavior: "smooth", block: "center" })
     }, 100)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,7 +256,20 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
   const selectedRegimeExtra = selectedRegime?.extra as { moral?: boolean; physical?: boolean } | null | undefined
   // Tipo de persona unificado (régimen autoritativo, RFC como respaldo) — ver lib/fiscal
   const persona = personaType(form.rfc, selectedRegimeExtra)
-  const isPhysicalPerson = persona ? persona === "fisica" : form.rfc.length === 13
+
+  // El régimen se acota al tipo de persona que dicta el RFC (12=moral, 13=física).
+  // Mientras el RFC no defina persona (incompleto), se muestran todos.
+  const rfcPersona = personaFromRfc(form.rfc)
+  const regimenOptions = regimenItems
+    .filter((item) => regimeAppliesToPersona(item.extra as { moral?: boolean; physical?: boolean } | null, rfcPersona))
+    .map((item) => ({ value: item.code, label: `${item.code} – ${item.name}` }))
+
+  // Si el régimen elegido ya no corresponde al RFC (p. ej. cambió el RFC), se limpia.
+  useEffect(() => {
+    if (!regimenItems.length || !rfcPersona || !form.fiscalRegime) return
+    if (!regimeAppliesToPersona(selectedRegimeExtra, rfcPersona)) set("fiscalRegime", "")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.rfc, regimenItems])
   const cfdiUseOptions = cfdiUseItems
     .filter((item) => FORWARDING_CFDI_USES.includes(item.code))
     .filter((item) => cfdiUseAppliesToPersona(item.extra as { moral?: boolean; physical?: boolean } | null, persona))
@@ -397,7 +411,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="text-sm">
             <p className="font-semibold">Completa estos datos para usar el cliente en expedientes:</p>
-            <p className="text-[--color-muted-foreground]">{highlightLabels.join(" · ")}</p>
+            <p className="text-[var(--color-muted-foreground)]">{highlightLabels.join(" · ")}</p>
           </div>
         </div>
       )}
@@ -417,11 +431,16 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
       <Card>
         <CardHeader><CardTitle>Perfil fiscal</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Select id="fiscalRegime" label="Régimen fiscal" placeholder="Selecciona..." options={regimenOptions} value={form.fiscalRegime} onChange={(e) => set("fiscalRegime", e.target.value)} error={errors["fiscalRegime"]} className={hl("fiscalRegime")} />
+          <div className="flex flex-col gap-1">
+            <Select id="fiscalRegime" label="Régimen fiscal" placeholder="Selecciona..." options={regimenOptions} value={form.fiscalRegime} onChange={(e) => set("fiscalRegime", e.target.value)} error={errors["fiscalRegime"]} className={hl("fiscalRegime")} />
+            {rfcPersona
+              ? <p className="text-xs text-[var(--color-muted-foreground)]">Solo régimenes de {rfcPersona === "fisica" ? "persona física" : "persona moral"} (según el RFC).</p>
+              : <p className="text-xs text-[var(--color-muted-foreground)]">Captura el RFC para acotar los régimenes.</p>}
+          </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[--color-foreground]">Tipo de persona</span>
+            <span className="text-sm font-medium text-[var(--color-foreground)]">Tipo de persona</span>
             <div className="flex h-9 items-center">
-              {persona ? <Badge variant="outline">{PERSONA_LABEL[persona]}</Badge> : <span className="text-sm text-[--color-muted-foreground]">Según RFC / régimen</span>}
+              {persona ? <Badge variant="outline">{PERSONA_LABEL[persona]}</Badge> : <span className="text-sm text-[var(--color-muted-foreground)]">Según RFC / régimen</span>}
             </div>
           </div>
           <Input id="fiscalZipCode" label="CP fiscal" value={form.fiscalZipCode} onChange={(e) => set("fiscalZipCode", e.target.value)} error={errors["fiscalZipCode"]} className={hl("fiscalZipCode")} maxLength={5} />
@@ -433,7 +452,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
           <Select id="defaultPaymentMethod" label="Método de pago default" placeholder="Selecciona..." options={paymentMethodOptions} value={form.defaultPaymentMethod} onChange={(e) => setDefaultPaymentMethod(e.target.value)} />
           <div className="flex flex-col gap-1">
             <Select id="defaultPaymentForm" label="Forma de pago default" placeholder="Selecciona..." options={defaultFormOptions} value={form.defaultPaymentForm} onChange={(e) => set("defaultPaymentForm", e.target.value)} disabled={isDefaultPPD} />
-            {isDefaultPPD && <p className="text-xs text-[--color-muted-foreground]">PPD usa forma "99 - Por definir" (regla SAT).</p>}
+            {isDefaultPPD && <p className="text-xs text-[var(--color-muted-foreground)]">PPD usa forma "99 - Por definir" (regla SAT).</p>}
           </div>
           <Select id="complianceStatus" label="Cumplimiento fiscal/KYC" options={COMPLIANCE_OPTIONS} value={form.complianceStatus} onChange={(e) => set("complianceStatus", e.target.value)} />
         </CardContent>
@@ -443,7 +462,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
         <CardHeader><CardTitle>Condiciones comerciales</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Input id="creditTermsDays" label="Días de crédito" type="number" min="0" value={form.creditTermsDays} onChange={(e) => set("creditTermsDays", e.target.value)} error={errors["creditTermsDays"]} />
-          <Input id="creditLimit" label="Límite de crédito" type="number" min="0" step="0.01" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} error={errors["creditLimit"]} />
+          <MoneyInput id="creditLimit" label="Límite de crédito" currency={form.creditCurrency} value={form.creditLimit} onChange={(v) => set("creditLimit", v)} error={errors["creditLimit"]} />
           <Select id="creditCurrency" label="Moneda" options={currencyOptions} value={form.creditCurrency} onChange={(e) => set("creditCurrency", e.target.value)} />
           <Input id="salesOwner" label="Ejecutivo comercial" value={form.salesOwner} onChange={(e) => set("salesOwner", e.target.value)} />
           <Select id="documentsStatus" label="Documentación" options={DOCUMENTS_OPTIONS} value={form.documentsStatus} onChange={(e) => set("documentsStatus", e.target.value)} />
@@ -462,18 +481,18 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {form.contacts.map((contact, index) => (
-            <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-[--color-border] p-3 md:grid-cols-6">
+            <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-[var(--color-border)] p-3 md:grid-cols-6">
               <Select id={`contact-type-${index}`} label="Tipo" options={CONTACT_TYPE_OPTIONS} value={contact.type} onChange={(e) => updateContact(index, { type: e.target.value })} />
               <Input id={`contact-name-${index}`} label="Nombre" value={contact.name} onChange={(e) => updateContact(index, { name: e.target.value })} error={errors[`contact_${index}_name`]} className={hlSet.has("contacts") && index === 0 ? "ring-2 ring-amber-400 ring-offset-1" : undefined} />
               <Input id={`contact-email-${index}`} label="Correo" type="email" value={contact.email} onChange={(e) => updateContact(index, { email: e.target.value })} error={errors[`contact_${index}_email`]} />
               <Input id={`contact-phone-${index}`} label="Teléfono" value={contact.phone} onChange={(e) => updateContact(index, { phone: e.target.value })} error={errors[`contact_${index}_phone`]} />
               <Input id={`contact-mobile-${index}`} label="Móvil" value={contact.mobile} onChange={(e) => updateContact(index, { mobile: e.target.value })} error={errors[`contact_${index}_mobile`]} />
               <div className="flex items-end justify-between gap-2">
-                <label className="flex items-center gap-2 pb-2 text-sm text-[--color-muted-foreground]">
+                <label className="flex items-center gap-2 pb-2 text-sm text-[var(--color-muted-foreground)]">
                   <input type="checkbox" checked={contact.isPrimary} onChange={(e) => updateContact(index, { isPrimary: e.target.checked }, true)} />
                   Principal
                 </label>
-                <button type="button" className="rounded p-2 text-[--color-muted-foreground] hover:bg-red-50 hover:text-[--color-destructive]" onClick={() => set("contacts", form.contacts.filter((_, i) => i !== index))} disabled={form.contacts.length === 1}>
+                <button type="button" className="rounded p-2 text-[var(--color-muted-foreground)] hover:bg-red-50 hover:text-[var(--color-destructive)]" onClick={() => set("contacts", form.contacts.filter((_, i) => i !== index))} disabled={form.contacts.length === 1}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -491,7 +510,7 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {form.addresses.map((address, index) => (
-            <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-[--color-border] p-3 md:grid-cols-[180px_minmax(0,1fr)_180px_112px_40px]">
+            <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-[var(--color-border)] p-3 md:grid-cols-[180px_minmax(0,1fr)_180px_112px_40px]">
               <Select id={`address-type-${index}`} label="Tipo" options={ADDRESS_TYPE_OPTIONS} value={address.type} onChange={(e) => updateAddress(index, { type: e.target.value })} />
               <AddressInput
                 id={`address-${index}`}
@@ -501,13 +520,13 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
               />
               <Input id={`address-label-${index}`} label="Etiqueta" value={address.label} onChange={(e) => updateAddress(index, { label: e.target.value })} placeholder="Matriz, planta, bodega..." />
               <div className="flex items-end">
-                <label className="flex items-center gap-2 pb-2 text-sm text-[--color-muted-foreground]">
+                <label className="flex items-center gap-2 pb-2 text-sm text-[var(--color-muted-foreground)]">
                   <input type="checkbox" checked={address.isPrimary} onChange={(e) => updateAddress(index, { isPrimary: e.target.checked })} />
                   Principal
                 </label>
               </div>
               <div className="flex items-end justify-end">
-                <button type="button" className="mb-0.5 rounded p-2 text-[--color-muted-foreground] hover:bg-red-50 hover:text-[--color-destructive] disabled:opacity-30" onClick={() => set("addresses", form.addresses.filter((_, i) => i !== index))} disabled={form.addresses.length === 1}>
+                <button type="button" className="mb-0.5 rounded p-2 text-[var(--color-muted-foreground)] hover:bg-red-50 hover:text-[var(--color-destructive)] disabled:opacity-30" onClick={() => set("addresses", form.addresses.filter((_, i) => i !== index))} disabled={form.addresses.length === 1}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -551,13 +570,13 @@ export function CustomerMasterForm({ customer, loading, submitLabel, onSubmit, c
 function FieldTextArea({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-[--color-foreground]">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-[var(--color-foreground)]">{label}</label>
       <textarea
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={4}
-        className="w-full rounded-md border border-[--color-border] bg-[--color-background] px-3 py-2 text-sm text-[--color-foreground] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[--color-primary]"
+        className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
       />
     </div>
   )

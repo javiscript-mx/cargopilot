@@ -13,6 +13,7 @@ import { authClient } from "@/lib/auth-client"
 import { validateCatalogCode, validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 
 export const Route = createFileRoute("/catalog")({
   beforeLoad: async () => {
@@ -51,6 +52,7 @@ const EMPTY_FORM = { code: "", name: "", autotransporte: false }
 function CatalogPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [activeCategory, setActiveCategory] = useState<CatalogCategory>("supplier_type")
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -160,10 +162,10 @@ function CatalogPage() {
   return (
     <AppLayout>
       <div className="mb-6 flex items-center gap-3">
-        <BookOpen className="h-6 w-6 text-[--color-muted-foreground]" />
+        <BookOpen className="h-6 w-6 text-[var(--color-muted-foreground)]" />
         <div>
           <h1 className="text-2xl font-bold">Catálogos</h1>
-          <p className="text-sm text-[--color-muted-foreground]">
+          <p className="text-sm text-[var(--color-muted-foreground)]">
             Las opciones que aparecen en los formularios del sistema
           </p>
         </div>
@@ -184,7 +186,7 @@ function CatalogPage() {
         <nav className="hidden w-64 shrink-0 flex-col gap-5 lg:flex">
           {CATALOG_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">
                 {group.label}
               </p>
               <div className="flex flex-col gap-0.5">
@@ -197,15 +199,15 @@ function CatalogPage() {
                       className={cn(
                         "flex items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors",
                         isActive
-                          ? "bg-[--color-primary] font-medium text-white"
-                          : "text-[--color-foreground] hover:bg-[--color-muted]",
+                          ? "bg-[var(--color-primary)] font-medium text-white"
+                          : "text-[var(--color-foreground)] hover:bg-[var(--color-muted)]",
                       )}
                     >
                       <span>{CATALOG_CATEGORY_LABELS[cat]}</span>
                       <span
                         className={cn(
                           "ml-2 rounded-full px-2 py-0.5 text-xs tabular-nums",
-                          isActive ? "bg-white/20 text-white" : "bg-[--color-muted] text-[--color-muted-foreground]",
+                          isActive ? "bg-white/20 text-white" : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
                         )}
                       >
                         {countByCategory[cat] ?? 0}
@@ -223,11 +225,11 @@ function CatalogPage() {
           <Card>
             <CardContent className="p-0">
               {/* Encabezado del panel */}
-              <div className="border-b border-[--color-border] p-4">
+              <div className="border-b border-[var(--color-border)] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold">{CATALOG_CATEGORY_LABELS[activeCategory]}</h2>
-                    <p className="mt-0.5 max-w-xl text-sm text-[--color-muted-foreground]">
+                    <p className="mt-0.5 max-w-xl text-sm text-[var(--color-muted-foreground)]">
                       {CATEGORY_HINTS[activeCategory]}
                     </p>
                   </div>
@@ -249,7 +251,7 @@ function CatalogPage() {
 
                 {/* Formulario de alta */}
                 {showForm && (
-                  <form onSubmit={handleSave} className="mt-4 rounded-md border border-[--color-border] bg-[--color-muted]/40 p-4">
+                  <form onSubmit={handleSave} className="mt-4 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr]">
                       <Input
                         id="code" label="Código"
@@ -268,13 +270,13 @@ function CatalogPage() {
                       <label className="mt-3 flex items-start gap-2 text-sm">
                         <input
                           type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-[--color-border]"
+                          className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)]"
                           checked={form.autotransporte}
                           onChange={(e) => setForm((f) => ({ ...f, autotransporte: e.target.checked }))}
                         />
                         <span>
                           Usa autotransporte (Carta Porte)
-                          <span className="block text-xs text-[--color-muted-foreground]">
+                          <span className="block text-xs text-[var(--color-muted-foreground)]">
                             Los proveedores de este tipo capturarán Unidades y Operadores. Marca solo transportistas terrestres.
                           </span>
                         </span>
@@ -291,28 +293,28 @@ function CatalogPage() {
 
                 {/* Buscador */}
                 <div className="relative mt-4">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--color-muted-foreground]" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Buscar por código o nombre..."
-                    className="w-full rounded-md border border-[--color-border] bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[--color-primary]"
+                    className="w-full rounded-md border border-[var(--color-border)] bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   />
                 </div>
               </div>
 
               {/* Tabla de ítems */}
               {isLoading ? (
-                <p className="py-10 text-center text-sm text-[--color-muted-foreground]">Cargando...</p>
+                <p className="py-10 text-center text-sm text-[var(--color-muted-foreground)]">Cargando...</p>
               ) : items.length === 0 ? (
-                <p className="py-10 text-center text-sm text-[--color-muted-foreground]">
+                <p className="py-10 text-center text-sm text-[var(--color-muted-foreground)]">
                   {search ? "Sin resultados para la búsqueda." : "No hay elementos en esta categoría."}
                 </p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-[--color-border] text-left text-xs uppercase tracking-wide text-[--color-muted-foreground]">
+                    <tr className="border-b border-[var(--color-border)] text-left text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
                       <th className="px-4 py-2.5 font-medium">Código</th>
                       <th className="px-4 py-2.5 font-medium">Nombre</th>
                       {isSupplierType && <th className="px-4 py-2.5 font-medium">Autotransporte</th>}
@@ -325,12 +327,12 @@ function CatalogPage() {
                       <tr
                         key={item.id}
                         className={cn(
-                          "border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/40",
+                          "border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-muted)]/40",
                           !item.active && "opacity-50",
                         )}
                       >
                         <td className="px-4 py-2.5">
-                          <span className="rounded bg-[--color-muted] px-2 py-0.5 font-mono text-xs font-medium">
+                          <span className="rounded bg-[var(--color-muted)] px-2 py-0.5 font-mono text-xs font-medium">
                             {item.code}
                           </span>
                         </td>
@@ -339,7 +341,7 @@ function CatalogPage() {
                             <input
                               autoFocus
                               defaultValue={item.name}
-                              className="w-full rounded border border-[--color-primary] px-2 py-1 text-sm focus:outline-none"
+                              className="w-full rounded border border-[var(--color-primary)] px-2 py-1 text-sm focus:outline-none"
                               onBlur={(e) => {
                                 const name = e.target.value.trim()
                                 if (name && name !== item.name) updateMutation.mutate({ id: item.id, data: { name } })
@@ -379,24 +381,24 @@ function CatalogPage() {
                             <button
                               title="Editar nombre"
                               onClick={() => setEditingItem(item)}
-                              className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+                              className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               title={item.active ? "Desactivar — deja de aparecer en formularios" : "Reactivar"}
                               onClick={() => setActiveMutation.mutate({ id: item.id, active: !item.active })}
-                              className="whitespace-nowrap rounded px-2 py-1 text-xs text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+                              className="whitespace-nowrap rounded px-2 py-1 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                             >
                               {item.active ? "Desactivar" : "Activar"}
                             </button>
                             <button
                               title="Dar de baja (baja lógica — conserva el histórico)"
-                              onClick={() => {
-                                if (confirm(`¿Dar de baja "${item.name}"? Queda inactivo y deja de aparecer en formularios, pero se conserva en el histórico.`))
+                              onClick={async () => {
+                                if (await confirm(`¿Dar de baja "${item.name}"? Queda inactivo y deja de aparecer en formularios, pero se conserva en el histórico.`))
                                   deleteMutation.mutate(item.id)
                               }}
-                              className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                              className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)]"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>

@@ -127,3 +127,91 @@ export async function syncLegScopeTasks(legId: string, newScope: "local" | "fora
     ),
   ])
 }
+
+// ─── Auto-marcado de tareas del tramo (derivadas de datos, no del usuario) ────
+// Estas tareas reflejan un HECHO verificable y se marcan/desmarcan solas según
+// se llene la ruta, se asigne la unidad/operador y se timbre la Carta Porte.
+// recoleccion/transito(salida)/entrega siguen siendo MANUALES (no hay señal).
+export const AUTO_LEG_TASK_CODES = ["asignar_unidad", "asignar_operador", "ubicaciones", "timbrar_cp"] as const
+
+export async function syncLegAutoTasks(legId: string): Promise<void> {
+  const leg = await prisma.shipmentLeg.findUnique({
+    where: { id: legId },
+    select: {
+      id: true, origin: true, destination: true,
+      vehicles: { select: { vehicleId: true, operatorId: true, cartaPorteInvoiceId: true } },
+      tasks: { select: { id: true, code: true, status: true } },
+    },
+  })
+  if (!leg) return
+
+  const loc = (v: unknown) => (v ?? {}) as { zip?: string; state?: string; rfc?: string }
+  const o = loc(leg.origin), d = loc(leg.destination)
+  const vs = leg.vehicles
+  const hasUnits = vs.length > 0
+  // Ruta lista = origen y destino con CP + Estado + RFC (remitente/destinatario)
+  const routeOk = Boolean(o.zip && o.state && o.rfc && d.zip && d.state && d.rfc)
+
+  const derived: Record<string, boolean> = {
+    ubicaciones: routeOk,
+    asignar_unidad: hasUnits && vs.every((v) => Boolean(v.vehicleId)),
+    asignar_operador: hasUnits && vs.every((v) => Boolean(v.operatorId)),
+    timbrar_cp: hasUnits && vs.every((v) => Boolean(v.cartaPorteInvoiceId)),
+  }
+
+  const updates = []
+  for (const t of leg.tasks) {
+    if (!(t.code in derived)) continue
+    // No piso estados manuales especiales (omitida/bloqueada)
+    if (t.status === "skipped" || t.status === "blocked") continue
+    const target = derived[t.code] ? "done" : "pending"
+    if (t.status !== target) {
+      updates.push(prisma.legTask.update({
+        where: { id: t.id },
+        data: { status: target, completedAt: target === "done" ? new Date() : null },
+      }))
+    }
+  }
+  if (updates.length) await prisma.$transaction(updates)
+}
+
+// Tareas del EXPEDIENTE (no del tramo) que se derivan de datos verificables:
+// cotizar (hay cargos en la cotización), planear_tramos (hay ≥1 tramo), facturar
+// (factura de servicio timbrada). El resto (recibir instrucción, conciliar, cerrar…)
+// son humanas y siguen manuales.
+export const AUTO_SHIPMENT_TASK_CODES = ["recibir_instruccion", "cotizar", "planear_tramos", "facturar"] as const
+
+export async function syncShipmentAutoTasks(shipmentId: string): Promise<void> {
+  const [tasks, quote, legCount, invoices] = await Promise.all([
+    prisma.shipmentTask.findMany({ where: { shipmentId }, select: { id: true, code: true, status: true } }),
+    prisma.shipmentQuote.findUnique({ where: { shipmentId }, select: { items: true } }),
+    prisma.shipmentLeg.count({ where: { shipmentId } }),
+    // "invoice_cp" = factura de servicio con complemento Carta Porte; también cuenta como facturación
+    prisma.invoice.findMany({ where: { shipmentId, kind: { in: ["service", "invoice_cp"] } }, select: { status: true } }),
+  ])
+  const quoteItems = (quote?.items as { amount?: number }[] | null) ?? []
+  const quoteHasCharges = quoteItems.some((i) => Number(i.amount) > 0)
+  const serviceStamped = invoices.some((i) => i.status === "stamped")
+
+  const derived: Record<string, boolean> = {
+    // Si ya hay cotización con cargos o un tramo planeado, la instrucción del cliente ya se recibió
+    recibir_instruccion: quoteHasCharges || legCount > 0,
+    cotizar: quoteHasCharges,
+    planear_tramos: legCount > 0,
+    facturar: serviceStamped,
+  }
+
+  const updates = []
+  for (const t of tasks) {
+    if (!(t.code in derived)) continue
+    if (t.status === "skipped" || t.status === "blocked") continue
+    const target = derived[t.code] ? "done" : "pending"
+    if (t.status !== target) {
+      updates.push(prisma.shipmentTask.update({
+        where: { id: t.id },
+        data: { status: target, completedAt: target === "done" ? new Date() : null },
+      }))
+    }
+  }
+  if (updates.length) await prisma.$transaction(updates)
+}

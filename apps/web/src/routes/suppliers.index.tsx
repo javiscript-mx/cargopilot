@@ -29,12 +29,13 @@ function SuppliersPage() {
   const { can } = useCan()
   const canWrite = can("suppliers.write")
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["suppliers", { page, search: debouncedSearch }],
-    queryFn: () => suppliersApi.listPaged({ page, pageSize: PAGE_SIZE, search: debouncedSearch }),
+    queryKey: ["suppliers", { page, pageSize, search: debouncedSearch }],
+    queryFn: () => suppliersApi.listPaged({ page, pageSize, search: debouncedSearch }),
     placeholderData: keepPreviousData,
   })
   const suppliers = data?.data ?? []
@@ -54,7 +55,7 @@ function SuppliersPage() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Proveedores</h1>
-          <p className="text-[--color-muted-foreground]">{total} proveedores registrados</p>
+          <p className="text-[var(--color-muted-foreground)]">{total} proveedores registrados</p>
         </div>
         {canWrite && (
           <Link to="/suppliers/new" className="w-full sm:w-auto">
@@ -72,9 +73,9 @@ function SuppliersPage() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-[--color-muted-foreground]">Cargando...</div>
+            <div className="flex items-center justify-center py-12 text-[var(--color-muted-foreground)]">Cargando...</div>
           ) : suppliers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-[--color-muted-foreground]">
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--color-muted-foreground)]">
               <Truck className="h-12 w-12 opacity-30" />
               <p>{debouncedSearch ? "Sin resultados para la búsqueda" : "No hay proveedores registrados"}</p>
               {!debouncedSearch && canWrite && (
@@ -84,21 +85,21 @@ function SuppliersPage() {
           ) : (
             <>
               {/* Mobile: tarjetas apiladas */}
-              <ul className="divide-y divide-[--color-border] md:hidden">
+              <ul className="divide-y divide-[var(--color-border)] md:hidden">
                 {suppliers.map((s) => (
                   <li key={s.id}>
                     <Link
                       to="/suppliers/$id"
                       params={{ id: s.id }}
-                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[--color-muted]/50"
+                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--color-muted)]/50"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-[--color-primary]">{s.name}</p>
+                        <p className="truncate font-medium text-[var(--color-primary)]">{s.name}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[s.type] ?? TYPE_COLORS["other"]}`}>
                             {typeLabel(s.type)}
                           </span>
-                          {s.rfc && <span className="font-mono text-xs text-[--color-muted-foreground]">{s.rfc}</span>}
+                          {s.rfc && <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{s.rfc}</span>}
                         </div>
                       </div>
                       <Badge variant={s.active ? "success" : "outline"}>{s.active ? "Activo" : "Inactivo"}</Badge>
@@ -110,19 +111,19 @@ function SuppliersPage() {
               {/* Desktop: tabla */}
               <table className="hidden w-full text-sm md:table">
                 <thead>
-                  <tr className="border-b border-[--color-border]">
-                    <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Nombre</th>
-                    <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Tipo</th>
-                    <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">RFC</th>
-                    <th className="hidden px-4 py-3 text-left font-medium text-[--color-muted-foreground] lg:table-cell">Contacto</th>
-                    <th className="px-4 py-3 text-left font-medium text-[--color-muted-foreground]">Estado</th>
+                  <tr className="border-b border-[var(--color-border)]">
+                    <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Nombre</th>
+                    <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Tipo</th>
+                    <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">RFC</th>
+                    <th className="hidden px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)] lg:table-cell">Contacto</th>
+                    <th className="px-4 py-3 text-left font-medium text-[var(--color-muted-foreground)]">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {suppliers.map((s) => (
-                    <tr key={s.id} className="border-b border-[--color-border] last:border-0 hover:bg-[--color-muted]/50">
+                    <tr key={s.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-muted)]/50">
                       <td className="px-4 py-3">
-                        <Link to="/suppliers/$id" params={{ id: s.id }} className="font-medium text-[--color-primary] hover:underline">
+                        <Link to="/suppliers/$id" params={{ id: s.id }} className="font-medium text-[var(--color-primary)] hover:underline">
                           {s.name}
                         </Link>
                       </td>
@@ -131,8 +132,8 @@ function SuppliersPage() {
                           {typeLabel(s.type)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-[--color-muted-foreground]">{s.rfc ?? "—"}</td>
-                      <td className="hidden px-4 py-3 text-[--color-muted-foreground] lg:table-cell">
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted-foreground)]">{s.rfc ?? "—"}</td>
+                      <td className="hidden px-4 py-3 text-[var(--color-muted-foreground)] lg:table-cell">
                         <div>{s.contact ?? "—"}</div>
                         {(s.phone || s.email) && (
                           <div className="text-xs">{[s.phone, s.email].filter(Boolean).join(" · ")}</div>
@@ -148,7 +149,7 @@ function SuppliersPage() {
             </>
           )}
           {total > 0 && (
-            <PaginationBar page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
+            <PaginationBar page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1) }} />
           )}
         </CardContent>
       </Card>

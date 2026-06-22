@@ -36,7 +36,7 @@ export function CargoSection({ shipmentId, cargoType, canEdit, bare = false }: P
     <Card className={bare ? "border-0 bg-transparent shadow-none" : ""}>
       <CardHeader className={bare ? "p-0 pb-3" : "pb-3"}>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Boxes className="h-4 w-4 text-[--color-muted-foreground]" /> Carga
+          <Boxes className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Carga
         </CardTitle>
       </CardHeader>
       <CardContent className={bare ? "flex flex-col gap-5 p-0" : "flex flex-col gap-5"}>
@@ -52,19 +52,19 @@ export function CargoSection({ shipmentId, cargoType, canEdit, bare = false }: P
             />
           ) : (
             <div className="flex justify-between gap-4 text-sm">
-              <span className="text-[--color-muted-foreground]">Modalidad de carga</span>
+              <span className="text-[var(--color-muted-foreground)]">Modalidad de carga</span>
               <span className="font-medium">{cargoLabel ?? "—"}</span>
             </div>
           )}
         </div>
 
         {contenerizada && (
-          <div className="border-t border-[--color-border] pt-4">
+          <div className="border-t border-[var(--color-border)] pt-4">
             <ContainersBlock shipmentId={shipmentId} canEdit={canEdit} />
           </div>
         )}
 
-        <div className="border-t border-[--color-border] pt-4">
+        <div className="border-t border-[var(--color-border)] pt-4">
           <MerchandiseBlock shipmentId={shipmentId} canEdit={canEdit} contenerizada={contenerizada} />
         </div>
       </CardContent>

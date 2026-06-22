@@ -22,8 +22,8 @@ export function useToast(): ToastApi {
 
 const VARIANT: Record<Variant, { icon: typeof Info; cls: string; iconCls: string }> = {
   success: { icon: CheckCircle2, cls: "border-green-300 bg-green-50 text-green-900", iconCls: "text-green-600" },
-  error:   { icon: AlertCircle,  cls: "border-red-300 bg-red-50 text-red-900",       iconCls: "text-[--color-destructive]" },
-  info:    { icon: Info,         cls: "border-[--color-border] bg-white text-[--color-foreground]", iconCls: "text-[--color-primary]" },
+  error:   { icon: AlertCircle,  cls: "border-red-300 bg-red-50 text-red-900",       iconCls: "text-[var(--color-destructive)]" },
+  info:    { icon: Info,         cls: "border-[var(--color-border)] bg-white text-[var(--color-foreground)]", iconCls: "text-[var(--color-primary)]" },
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {

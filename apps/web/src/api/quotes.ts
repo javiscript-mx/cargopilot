@@ -5,8 +5,9 @@ export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected"
 
 export interface QuoteItem {
   concept: string
-  amount: number
+  amount: number // venta al cliente (sin IVA)
   productKey?: string // clave prodserv SAT (liga cotizado ↔ facturado)
+  estimatedCost?: number // costo estimado de ESTE servicio (sin IVA) — margen por concepto
 }
 
 export interface ShipmentQuote {
@@ -31,9 +32,24 @@ export interface QuoteInput {
   notes?: string | null
 }
 
+export interface QuoteRevision {
+  id: string
+  shipmentId: string
+  version: number
+  status: QuoteStatus
+  currency: string
+  items: QuoteItem[] | null
+  subtotal: string // Decimal → string
+  estimatedCost: string | null
+  notes: string | null
+  createdAt: string
+  createdBy: string | null
+}
+
 export const quotesApi = {
   // Devuelve null si el expediente aún no tiene cotización
   get: (shipmentId: string) => apiClient.get<ShipmentQuote | null>(`/shipments/${shipmentId}/quote`),
   save: (shipmentId: string, data: QuoteInput) =>
     apiClient.put<ShipmentQuote>(`/shipments/${shipmentId}/quote`, data),
+  revisions: (shipmentId: string) => apiClient.get<QuoteRevision[]>(`/shipments/${shipmentId}/quote/revisions`),
 }

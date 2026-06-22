@@ -12,6 +12,11 @@ export const SETTINGS_DEFAULTS: AppSettings = {
   "invoicing.regimenFiscal": "601",
   "shipments.folioPrefix": "EXP",
   "storage.bucket": "",
+  "appearance.primaryColor": "#284a70",
+  "appearance.accentColor": "#f49c2f",
+  "appearance.menuColor": "#111d2d",
+  "branding.systemName": "HM Sistema",
+  "branding.logoDataUrl": "",
 }
 
 export function useSettings() {

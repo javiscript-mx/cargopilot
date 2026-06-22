@@ -15,12 +15,19 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\""
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "esbuild", "prisma", "better-auth"]
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "better-auth"
+    ]
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
   }

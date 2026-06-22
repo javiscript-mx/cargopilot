@@ -108,7 +108,7 @@ function EditShipmentPage() {
   if (isLoading || !form) {
     return (
       <AppLayout>
-        <div className="flex h-40 items-center justify-center text-[--color-muted-foreground]">
+        <div className="flex h-40 items-center justify-center text-[var(--color-muted-foreground)]">
           Cargando...
         </div>
       </AppLayout>
@@ -120,7 +120,7 @@ function EditShipmentPage() {
       <div className="mb-6">
         <Link
           to="/shipments/$id" params={{ id }}
-          className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]"
+          className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
         >
           <ArrowLeft className="h-4 w-4" /> {shipment?.folio}
         </Link>
@@ -142,7 +142,7 @@ function EditShipmentPage() {
               {...f("operationType")} error={errors["operationType"]} disabled={locked}
             />
             {locked && (
-              <p className="-mt-2 text-xs text-[--color-muted-foreground]">
+              <p className="-mt-2 text-xs text-[var(--color-muted-foreground)]">
                 Cliente y tipo de operación quedan bloqueados: el expediente ya tiene operación en curso (proceso, tramos, facturas o bitácora).
               </p>
             )}

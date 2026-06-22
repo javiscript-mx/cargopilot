@@ -38,3 +38,19 @@ export function cfdiUseAppliesToPersona(
   if (!persona) return true
   return persona === "fisica" ? extra?.physical !== false : extra?.moral !== false
 }
+
+/**
+ * ¿El régimen fiscal aplica al tipo de persona? Banderas moral/physical del catálogo SAT
+ * (601 moral, 605 física, 626 ambos…). Si el régimen no marca ninguna (ambas false, p. ej.
+ * 610 Residentes en el Extranjero) NO discrimina → aplica a ambos.
+ */
+export function regimeAppliesToPersona(
+  extra: { moral?: boolean; physical?: boolean } | null | undefined,
+  persona: PersonaType | null,
+): boolean {
+  if (!persona) return true
+  const moral = extra?.moral === true
+  const physical = extra?.physical === true
+  if (!moral && !physical) return true
+  return persona === "fisica" ? physical : moral
+}

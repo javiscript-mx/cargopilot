@@ -94,3 +94,24 @@ export async function getCFDIXml(cfdiId: string): Promise<string> {
   const response = await facturamaFetch(`/api/Cfdi/xml/issued/${cfdiId}`)
   return response.Content // base64
 }
+
+// Extrae la identidad fiscal del CFDI directamente del XML timbrado (fuente canónica):
+// - uuid  = TimbreFiscalDigital@UUID (folio fiscal, identificador SAT del comprobante)
+// - serie/folio = atributos del nodo raíz cfdi:Comprobante (los que asigna/estampa el PAC)
+// Robusto frente a la forma del JSON de Facturama, que varía entre versiones de su API.
+export function parseCfdiIdentifiers(xml: string): { uuid?: string; serie?: string; folio?: string } {
+  // UUID: anclado al nodo TimbreFiscalDigital — si el CFDI tiene CfdiRelacionados
+  // (sustitución), el primer UUID del XML sería el del relacionado, no el del timbre.
+  const uuid =
+    xml.match(/TimbreFiscalDigital\b[^>]*\bUUID="([^"]+)"/i)?.[1] ??
+    xml.match(/\bUUID="([^"]+)"/i)?.[1]
+  // Serie/Folio: atributos del nodo raíz Comprobante (el primer tag del documento).
+  const comprobante = xml.match(/<[A-Za-z]*:?Comprobante\b[^>]*>/)?.[0] ?? xml.slice(0, 2000)
+  const serie = comprobante.match(/\bSerie="([^"]*)"/)?.[1]
+  const folio = comprobante.match(/\bFolio="([^"]*)"/)?.[1]
+  return {
+    ...(uuid ? { uuid } : {}),
+    ...(serie ? { serie } : {}),
+    ...(folio ? { folio } : {}),
+  }
+}

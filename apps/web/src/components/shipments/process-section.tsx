@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Route, Truck, Plus, Trash2, Pencil, CheckCircle2, Circle, Star, MapPin, FileCheck } from "lucide-react"
+import { Route, Truck, Plus, Trash2, Pencil, CheckCircle2, Circle, Star, MapPin, FileCheck, ArrowRight, ChevronDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 import { useCan } from "@/lib/permissions"
 import { LegDrawer } from "@/components/shipments/leg-drawer"
 import { LegVehicleDrawer } from "@/components/shipments/leg-vehicle-drawer"
@@ -13,11 +14,18 @@ import { CartaPortePanel } from "@/components/shipments/carta-porte-panel"
 import { TaskDrawer } from "@/components/shipments/task-drawer"
 import { processApi, type ProcessTask, type ProcessLeg, type LegScope, type LegLocation, type LegVehicleAssignment } from "@/api/process"
 
+// Tareas del tramo que el backend marca/desmarca solo (ruta, unidad/operador, timbrado).
+// En la UI se muestran con etiqueta "auto" y el check no es clickeable.
+const AUTO_LEG_TASK_CODES = new Set(["asignar_unidad", "asignar_operador", "ubicaciones", "timbrar_cp"])
+// Tareas del expediente auto-derivadas (cotización con cargos, hay tramos, factura timbrada).
+const AUTO_SHIPMENT_TASK_CODES = new Set(["recibir_instruccion", "cotizar", "planear_tramos", "facturar"])
+
 // view: "flow" = checklist de fases (flujo de trabajo); "transport" = ruta/tramos/unidades/CP
 // bare: sin Card propia (para integrarse dentro de una pestaña sin caja-en-caja)
 export function ProcessSection({ shipmentId, locked = false, view = "flow", bare = false, onGoToTab }: { shipmentId: string; locked?: boolean; view?: "flow" | "transport"; bare?: boolean; onGoToTab?: (tab: string) => void }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   // Gestionar (aplicar proceso, tramos) = operaciones; avanzar tareas = también finanzas.
   // Un expediente cancelado queda de solo lectura (locked).
   const { can } = useCan()
@@ -40,6 +48,9 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
   const [editingVehicle, setEditingVehicle] = useState<{ legId: string; vehicle: LegVehicleAssignment | null; index: number } | null>(null)
   const [cartaPorteUnit, setCartaPorteUnit] = useState<{ unit: LegVehicleAssignment; index: number } | null>(null)
   const [editingTask, setEditingTask] = useState<{ task: ProcessTask; isLeg: boolean } | null>(null)
+  // Colapsado por tramo (default expandido); al colapsar se muestra solo el resumen corto
+  const [collapsedLegs, setCollapsedLegs] = useState<Record<string, boolean>>({})
+  const toggleLeg = (id: string) => setCollapsedLegs((c) => ({ ...c, [id]: !c[id] }))
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["process", shipmentId] })
@@ -84,7 +95,7 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
   if (isLoading) {
     return (
       <Card className={bareCls}>
-        <CardContent className={bare ? "py-6 text-center text-sm text-[--color-muted-foreground] px-0" : "py-6 text-center text-sm text-[--color-muted-foreground]"}>Cargando proceso...</CardContent>
+        <CardContent className={bare ? "py-6 text-center text-sm text-[var(--color-muted-foreground)] px-0" : "py-6 text-center text-sm text-[var(--color-muted-foreground)]"}>Cargando proceso...</CardContent>
       </Card>
     )
   }
@@ -94,7 +105,7 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
     if (view === "transport") {
       return (
         <Card className={bareCls}>
-          <CardContent className={bare ? "py-6 text-center text-sm text-[--color-muted-foreground] px-0" : "py-6 text-center text-sm text-[--color-muted-foreground]"}>
+          <CardContent className={bare ? "py-6 text-center text-sm text-[var(--color-muted-foreground)] px-0" : "py-6 text-center text-sm text-[var(--color-muted-foreground)]"}>
             Aplica un proceso (pestaña Plan) para planear tramos y transporte.
           </CardContent>
         </Card>
@@ -104,15 +115,15 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
       <Card className={bareCls}>
         <CardHeader className={bare ? "p-0 pb-3" : "pb-3"}>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Route className="h-4 w-4 text-[--color-muted-foreground]" /> Flujo de trabajo
+            <Route className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Flujo de trabajo
           </CardTitle>
         </CardHeader>
         <CardContent className={bare ? "p-0" : ""}>
           {!canManage ? (
-            <p className="text-sm text-[--color-muted-foreground]">Este expediente no tiene un proceso aplicado.</p>
+            <p className="text-sm text-[var(--color-muted-foreground)]">Este expediente no tiene un proceso aplicado.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-[--color-muted-foreground]">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
                 Aplica un proceso para desglosar el expediente en fases y tramos.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -158,15 +169,15 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-base">
             {view === "flow"
-              ? <><Route className="h-4 w-4 text-[--color-muted-foreground]" /> Flujo de trabajo</>
-              : <><Truck className="h-4 w-4 text-[--color-muted-foreground]" /> Ruta y transporte</>}
+              ? <><Route className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Flujo de trabajo</>
+              : <><Truck className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Ruta y transporte</>}
           </CardTitle>
           {view === "flow" && (
             <div className="flex items-center gap-2">
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[--color-muted]">
+              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[var(--color-muted)]">
                 <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
               </div>
-              <span className="whitespace-nowrap text-xs text-[--color-muted-foreground]">{doneTasks}/{allTasks.length}</span>
+              <span className="whitespace-nowrap text-xs text-[var(--color-muted-foreground)]">{doneTasks}/{allTasks.length}</span>
             </div>
           )}
         </div>
@@ -179,11 +190,11 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
             <div key={stage.id}>
               <div className="mb-1.5 flex items-center justify-between">
                 <h4 className="text-sm font-semibold">{stage.name}</h4>
-                <span className="text-xs text-[--color-muted-foreground]">{done}/{stage.tasks.length}</span>
+                <span className="text-xs text-[var(--color-muted-foreground)]">{done}/{stage.tasks.length}</span>
               </div>
-              <div className="flex flex-col divide-y divide-[--color-border] rounded-md border border-[--color-border]">
+              <div className="flex flex-col divide-y divide-[var(--color-border)] rounded-md border border-[var(--color-border)]">
                 {stage.tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} canAdvance={canAdvance} onToggle={() => toggleTask(task, false)} onEdit={() => setEditingTask({ task, isLeg: false })} />
+                  <TaskRow key={task.id} task={task} canAdvance={canAdvance} auto={AUTO_SHIPMENT_TASK_CODES.has(task.code)} onToggle={() => toggleTask(task, false)} onEdit={() => setEditingTask({ task, isLeg: false })} />
                 ))}
               </div>
             </div>
@@ -195,8 +206,8 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h4 className="flex items-center gap-1.5 text-sm font-semibold">
-              <Truck className="h-4 w-4 text-[--color-muted-foreground]" /> Tramos
-              <span className="font-normal text-[--color-muted-foreground]">({process!.legs.length})</span>
+              <Truck className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Tramos
+              <span className="font-normal text-[var(--color-muted-foreground)]">({process!.legs.length})</span>
             </h4>
             {canManage && (
               <div className="flex gap-2">
@@ -211,7 +222,7 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
           </div>
 
           {process!.legs.length === 0 ? (
-            <p className="rounded-md border border-dashed border-[--color-border] py-4 text-center text-sm text-[--color-muted-foreground]">
+            <p className="rounded-md border border-dashed border-[var(--color-border)] py-4 text-center text-sm text-[var(--color-muted-foreground)]">
               Sin tramos. Agrega el primero (local o foráneo).
             </p>
           ) : (
@@ -219,88 +230,130 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
               {process!.legs.map((leg, idx) => {
                 const done = leg.tasks.filter((t) => t.status === "done").length
                 const num = idx + 1
+                const isOpen = !collapsedLegs[leg.id]
                 return (
-                  <div key={leg.id} className="rounded-md border border-[--color-border]">
-                    <div className="flex items-center justify-between gap-2 border-b border-[--color-border] bg-[--color-muted]/40 px-3 py-2">
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">Tramo {num}</span>
-                          <Badge variant={leg.scope === "foraneo" ? "default" : "outline"}>
-                            {leg.scope === "foraneo" ? "Requiere Carta Porte" : "Sin Carta Porte"}
-                          </Badge>
-                          <span className="text-xs text-[--color-muted-foreground]">{done}/{leg.tasks.length}</span>
+                  <div key={leg.id} className="rounded-md border border-[var(--color-border)]">
+                    <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-muted)]/40 px-3 py-2">
+                      <button type="button" onClick={() => toggleLeg(leg.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold">Tramo {num}</span>
+                            <Badge variant={leg.scope === "foraneo" ? "default" : "outline"}>
+                              {leg.scope === "foraneo" ? "Requiere Carta Porte" : "Sin Carta Porte"}
+                            </Badge>
+                            <span className="text-xs text-[var(--color-muted-foreground)]">{done}/{leg.tasks.length}</span>
+                          </div>
+                          {!isOpen && (
+                            <span className="truncate text-xs text-[var(--color-muted-foreground)]">{legSummary(leg)}</span>
+                          )}
                         </div>
-                        {legRoute(leg) && (
-                          <span className="flex items-center gap-1 truncate text-xs text-[--color-muted-foreground]">
-                            <MapPin className="h-3 w-3 shrink-0" /> {legRoute(leg)}
-                          </span>
-                        )}
-                      </div>
+                      </button>
                       {canManage && (
                         <div className="flex shrink-0 items-center gap-1">
                           <button
                             title="Editar tramo"
                             onClick={() => setEditingLeg(leg)}
-                            className="rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+                            className="rounded p-1 text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             title="Eliminar tramo"
-                            onClick={() => { if (confirm(`¿Eliminar el tramo ${num}?`)) deleteLegMutation.mutate(leg.id) }}
-                            className="rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                            onClick={async () => { if (await confirm(`¿Eliminar el tramo ${num}?`)) deleteLegMutation.mutate(leg.id) }}
+                            className="rounded p-1 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       )}
                     </div>
-                    {/* Unidades de transporte del tramo */}
-                    <div className="border-b border-[--color-border] px-3 py-2">
+                    {isOpen && (<>
+                    {/* Ruta: remitente (origen) → destinatario (destino) */}
+                    <div className="border-b border-[var(--color-border)] px-3 py-2">
                       <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-[--color-muted-foreground]">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted-foreground)]">
+                          <MapPin className="h-3.5 w-3.5" /> Ruta
+                        </span>
+                        {canManage && legHasRoute(leg) && (
+                          <button onClick={() => setEditingLeg(leg)} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[var(--color-primary)] hover:bg-[var(--color-muted)]">
+                            <Pencil className="h-3 w-3" /> Editar
+                          </button>
+                        )}
+                      </div>
+                      {legHasRoute(leg) ? (
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <RouteEndpoint loc={leg.origin} fallback="Remitente" />
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+                          <RouteEndpoint loc={leg.destination} fallback="Destinatario" />
+                        </div>
+                      ) : canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditingLeg(leg)}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 py-2 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/10"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Definir origen y destino
+                        </button>
+                      ) : (
+                        <p className="text-xs text-[var(--color-muted-foreground)]">Sin origen ni destino.</p>
+                      )}
+                    </div>
+
+                    {/* Unidades de transporte del tramo */}
+                    <div className="border-b border-[var(--color-border)] px-3 py-2">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted-foreground)]">
                           <Truck className="h-3.5 w-3.5" /> Unidades
                           {leg.vehicles.length > 1 && <Badge variant="warning">{leg.vehicles.length} unidades</Badge>}
                         </span>
                         {canManage && (
                           <button
                             onClick={() => setEditingVehicle({ legId: leg.id, vehicle: null, index: leg.vehicles.length + 1 })}
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[--color-primary] hover:bg-[--color-muted]"
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[var(--color-primary)] hover:bg-[var(--color-muted)]"
                           >
                             <Plus className="h-3 w-3" /> Agregar
                           </button>
                         )}
                       </div>
                       {leg.vehicles.length === 0 ? (
-                        <p className="text-xs text-[--color-muted-foreground]">Sin unidad asignada.</p>
+                        <p className="text-xs text-[var(--color-muted-foreground)]">Sin unidad asignada.</p>
                       ) : (
                         <div className="flex flex-col gap-1">
                           {leg.vehicles.map((v, vi) => {
                             const label = [v.carrierName, v.vehicleLabel, v.operatorName].filter(Boolean).join(" · ") || "Unidad sin datos"
                             const trailers = [v.trailer1Plate, v.trailer2Plate].filter(Boolean).length
                             return (
-                              <div key={v.id} className="flex items-center justify-between gap-2 rounded bg-[--color-muted]/40 px-2 py-1">
+                              <div key={v.id} className="flex items-center justify-between gap-2 rounded bg-[var(--color-muted)]/40 px-2 py-1">
                                 <span className="flex min-w-0 items-center gap-1.5 text-xs">
-                                  <span className="shrink-0 font-medium text-[--color-muted-foreground]">{vi + 1}.</span>
+                                  <span className="shrink-0 font-medium text-[var(--color-muted-foreground)]">{vi + 1}.</span>
                                   <span className="truncate">{label}</span>
                                   {trailers > 0 && <Badge variant="outline">{trailers === 2 ? "Full" : "+1 remolque"}</Badge>}
                                   {v.cartaPorteInvoiceId && <Badge variant="success">CP timbrada</Badge>}
                                 </span>
                                 <div className="flex shrink-0 items-center gap-1">
                                   {leg.scope === "foraneo" && (
-                                    <button title="Carta Porte" onClick={() => setCartaPorteUnit({ unit: v, index: vi + 1 })}
-                                      className="rounded p-1 text-[--color-muted-foreground] hover:bg-[--color-muted] hover:text-[--color-primary]">
-                                      <FileCheck className="h-3.5 w-3.5" />
-                                    </button>
+                                    v.cartaPorteInvoiceId ? (
+                                      <button title="Ver Carta Porte" onClick={() => setCartaPorteUnit({ unit: v, index: vi + 1 })}
+                                        className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-primary)]">
+                                        <FileCheck className="h-3.5 w-3.5" />
+                                      </button>
+                                    ) : (
+                                      // Acción pendiente clave: se resalta (pulso ámbar) para que sea evidente dónde se timbra
+                                      <button title="Timbrar Carta Porte de esta unidad" onClick={() => setCartaPorteUnit({ unit: v, index: vi + 1 })}
+                                        className="flex animate-pulse items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-300 transition hover:animate-none hover:bg-amber-200">
+                                        <FileCheck className="h-3.5 w-3.5" /> Timbrar CP
+                                      </button>
+                                    )
                                   )}
                                   {canManage && (
                                     <>
                                       <button title="Editar unidad" onClick={() => setEditingVehicle({ legId: leg.id, vehicle: v, index: vi + 1 })}
-                                        className="rounded p-1 text-[--color-muted-foreground] hover:bg-[--color-muted] hover:text-[--color-foreground]">
+                                        className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                                         <Pencil className="h-3 w-3" />
                                       </button>
-                                      <button title="Quitar unidad" onClick={() => { if (confirm(`¿Quitar la unidad ${vi + 1} del tramo ${num}?`)) deleteVehicleMutation.mutate(v.id) }}
-                                        className="rounded p-1 text-[--color-muted-foreground] hover:bg-red-50 hover:text-[--color-destructive]">
+                                      <button title="Quitar unidad" onClick={async () => { if (await confirm(`¿Quitar la unidad ${vi + 1} del tramo ${num}?`)) deleteVehicleMutation.mutate(v.id) }}
+                                        className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-red-50 hover:text-[var(--color-destructive)]">
                                         <Trash2 className="h-3 w-3" />
                                       </button>
                                     </>
@@ -313,11 +366,12 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
                       )}
                     </div>
 
-                    <div className="flex flex-col divide-y divide-[--color-border]">
+                    <div className="flex flex-col divide-y divide-[var(--color-border)]">
                       {leg.tasks.map((task) => (
-                        <TaskRow key={task.id} task={task} canAdvance={canAdvance} onToggle={() => toggleTask(task, true)} onEdit={() => setEditingTask({ task, isLeg: true })} />
+                        <TaskRow key={task.id} task={task} canAdvance={canAdvance} auto={AUTO_LEG_TASK_CODES.has(task.code)} onToggle={() => toggleTask(task, true)} onEdit={() => setEditingTask({ task, isLeg: true })} />
                       ))}
                     </div>
+                    </>)}
                   </div>
                 )
               })}
@@ -351,12 +405,40 @@ export function ProcessSection({ shipmentId, locked = false, view = "flow", bare
 }
 
 // Resumen de ruta "Origen → Destino" a partir de las ubicaciones del tramo
-function legRoute(leg: ProcessLeg): string | null {
-  const name = (v: Record<string, unknown> | null) => (v as LegLocation | null)?.name?.trim()
-  const from = name(leg.origin)
-  const to = name(leg.destination)
-  if (!from && !to) return null
-  return `${from ?? "—"} → ${to ?? "—"}`
+// ¿El tramo ya tiene ruta capturada? (cualquier dato de origen o destino)
+function legHasRoute(leg: ProcessLeg): boolean {
+  const has = (v: Record<string, unknown> | null) => {
+    const l = (v ?? {}) as LegLocation
+    return Boolean(l.name || l.zip || l.address || l.state)
+  }
+  return has(leg.origin) || has(leg.destination)
+}
+
+// Resumen corto del tramo para cuando está colapsado: ruta + número de unidades
+function legSummary(leg: ProcessLeg): string {
+  const label = (v: Record<string, unknown> | null, fb: string) => {
+    const l = (v ?? {}) as LegLocation
+    return l.name?.trim() || [l.zip, l.state].filter(Boolean).join(" ") || fb
+  }
+  const route = legHasRoute(leg) ? `${label(leg.origin, "Origen")} → ${label(leg.destination, "Destino")}` : "Ruta pendiente"
+  const n = leg.vehicles.length
+  return `${route} · ${n} ${n === 1 ? "unidad" : "unidades"}`
+}
+
+// Extremo de la ruta (remitente/origen o destinatario/destino) en la lista de tramos
+function RouteEndpoint({ loc, fallback }: { loc: Record<string, unknown> | null; fallback: string }) {
+  const l = (loc ?? {}) as LegLocation
+  const name = l.name?.trim()
+  const place = [l.zip, l.state].filter(Boolean).join(" ")
+  if (!name && !place) {
+    return <span className="text-xs text-[var(--color-muted-foreground)]">{fallback}: —</span>
+  }
+  return (
+    <span className="inline-flex min-w-0 flex-col">
+      <span className="truncate text-xs font-medium">{name || fallback}</span>
+      {place && <span className="truncate text-[10px] text-[var(--color-muted-foreground)]">{place}</span>}
+    </span>
+  )
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -365,7 +447,7 @@ const STATUS_BADGE: Record<string, string> = {
   skipped: "Omitida",
 }
 
-function TaskRow({ task, canAdvance, onToggle, onEdit }: { task: ProcessTask; canAdvance: boolean; onToggle: () => void; onEdit: () => void }) {
+function TaskRow({ task, canAdvance, onToggle, onEdit, auto = false }: { task: ProcessTask; canAdvance: boolean; onToggle: () => void; onEdit: () => void; auto?: boolean }) {
   const done = task.status === "done"
   const muted = done || task.status === "skipped"
   const badge = STATUS_BADGE[task.status]
@@ -373,32 +455,33 @@ function TaskRow({ task, canAdvance, onToggle, onEdit }: { task: ProcessTask; ca
     <div className="flex items-start gap-2.5 px-3 py-2">
       <button
         onClick={onToggle}
-        disabled={!canAdvance}
-        title={done ? "Marcar pendiente" : "Marcar completada"}
+        disabled={!canAdvance || auto}
+        title={auto ? "Se marca automáticamente según los datos del tramo" : done ? "Marcar pendiente" : "Marcar completada"}
         className="mt-0.5 shrink-0 disabled:cursor-default"
       >
         {done
           ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-          : <Circle className={task.status === "in_progress" ? "h-4 w-4 text-[--color-primary]" : "h-4 w-4 text-[--color-muted-foreground]"} />}
+          : <Circle className={task.status === "in_progress" ? "h-4 w-4 text-[var(--color-primary)]" : "h-4 w-4 text-[var(--color-muted-foreground)]"} />}
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={muted ? "text-sm text-[--color-muted-foreground] line-through" : "text-sm"}>{task.name}</span>
+          <span className={muted ? "text-sm text-[var(--color-muted-foreground)] line-through" : "text-sm"}>{task.name}</span>
           {task.isMilestone && <Star className="h-3 w-3 shrink-0 text-amber-500" aria-label="Hito" />}
-          {badge && <span className="rounded-full bg-[--color-muted] px-1.5 py-0.5 text-[10px] font-medium text-[--color-muted-foreground]">{badge}</span>}
+          {auto && <span className="rounded-full bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)]" title="Esta tarea se marca sola">auto</span>}
+          {badge && <span className="rounded-full bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)]">{badge}</span>}
         </div>
         {(done || task.actualAt) && task.actualAt && (
-          <p className="mt-0.5 text-xs text-[--color-muted-foreground]">
+          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
             {new Date(task.actualAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
           </p>
         )}
-        {task.notes && <p className="mt-0.5 truncate text-xs text-[--color-muted-foreground]">{task.notes}</p>}
+        {task.notes && <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">{task.notes}</p>}
       </div>
-      {canAdvance && (
+      {canAdvance && !auto && (
         <button
           title="Editar tarea"
           onClick={onEdit}
-          className="mt-0.5 shrink-0 rounded p-1 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+          className="mt-0.5 shrink-0 rounded p-1 text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
         >
           <Pencil className="h-3 w-3" />
         </button>

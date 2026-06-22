@@ -11,6 +11,7 @@ export interface Supplier {
   contact: string | null
   address: Record<string, unknown> | null
   notes: string | null
+  creditTermsDays: number | null // días de crédito para vencimiento de cuentas por pagar
   active: boolean
   createdAt: string
   updatedAt: string

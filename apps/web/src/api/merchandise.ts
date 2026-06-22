@@ -13,10 +13,21 @@ export interface Merchandise {
   productKey: string | null // catálogo sat_product_key
   hsCode: string | null    // FraccionArancelaria
   containerId: string | null // contenedor asignado (opcional)
-  legId: string | null       // tramo asignado (Carta Porte por tramo)
-  legVehicleId: string | null // unidad del tramo asignada (reparto de carga)
+  legId: string | null        // LEGADO: primera asignación (usa legAssignments)
+  legVehicleId: string | null // LEGADO: primera asignación
+  legAssignments: MerchLegAssignment[] // tramos (1..N) por los que viaja la partida
+  status: MerchandiseStatus  // DERIVADO del progreso de los tramos (no editable)
   notes: string | null
   createdAt: string
+}
+
+export interface MerchLegAssignment { legId: string; legVehicleId: string | null }
+
+export type MerchandiseStatus = "in_transit" | "in_custody" | "delivered"
+export const MERCH_STATUS: Record<MerchandiseStatus, { label: string; variant: "default" | "success" | "warning" | "outline" }> = {
+  in_transit: { label: "En tránsito", variant: "default" },
+  in_custody: { label: "En custodia", variant: "warning" },
+  delivered: { label: "Entregada", variant: "success" },
 }
 
 export interface MerchandiseInput {
@@ -29,8 +40,7 @@ export interface MerchandiseInput {
   productKey?: string | null
   hsCode?: string | null
   containerId?: string | null
-  legId?: string | null
-  legVehicleId?: string | null
+  legAssignments?: { legId: string; legVehicleId?: string | null }[]
   notes?: string | null
 }
 

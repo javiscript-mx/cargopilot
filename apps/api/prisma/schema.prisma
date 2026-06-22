@@ -192,6 +192,8 @@ model Shipment {
   stages             ShipmentStage[]
   legs               ShipmentLeg[]
   quote              ShipmentQuote?  // cotización/tarifa del servicio (paso "cotizar")
+  quoteRevisions     QuoteRevision[] // historial de versiones de la cotización
+  expenses           ShipmentExpense[] // gastos/costos reales del expediente
 
   // Autotransporte (Carta Porte): unidad y operador subcontratados
   vehicleId   String?
@@ -222,6 +224,72 @@ model ShipmentQuote {
   @@map("shipment_quotes")
 }
 
+// Snapshot de cada cambio de la cotización (historial/trazabilidad de tarifa).
+// Se crea un registro cuando cambian los cargos, el estado o el costo al guardar.
+model QuoteRevision {
+  id            String   @id @default(cuid())
+  shipmentId    String
+  shipment      Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  version       Int
+  status        String
+  currency      String
+  items         Json?
+  subtotal      Decimal  @db.Decimal(14, 2) // suma de cargos (venta sin IVA)
+  estimatedCost Decimal? @db.Decimal(14, 2)
+  notes         String?
+  createdAt     DateTime @default(now())
+  createdBy     String?  // soft ref a User
+
+  @@index([shipmentId])
+  @@map("quote_revisions")
+}
+
+// Gasto/costo real que genera el expediente (flete pagado, casetas, maniobras, custodia…).
+// Se concilia contra el costo estimado de la cotización y contra el ingreso para la utilidad real.
+model ShipmentExpense {
+  id          String    @id @default(cuid())
+  shipmentId  String?   // opcional: un gasto puede ser general (sin expediente)
+  shipment    Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  category    String    // catálogo expense_category (flete, casetas, maniobras…)
+  supplierId  String?   // soft ref a Supplier (a quién se le paga)
+  concept     String
+  amount      Decimal   @db.Decimal(14, 2)
+  currency    String    @default("MXN")
+  status       String    @default("pending") // pending | authorized | paid
+  expenseDate  DateTime?
+  reference    String?   // folio/factura del proveedor
+  notes        String?
+  authorizedBy String?   // soft ref a User (quién autorizó el pago)
+  authorizedAt DateTime?
+  paidAt       DateTime? // fecha del pago que completó el gasto (saldado)
+  createdAt    DateTime  @default(now())
+  createdBy    String?   // soft ref a User
+
+  payments     ExpensePayment[]
+
+  @@index([shipmentId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("shipment_expenses")
+}
+
+// Pago (total o parcial) aplicado a un gasto. El status del gasto se deriva de la suma.
+model ExpensePayment {
+  id        String         @id @default(cuid())
+  expenseId String
+  expense   ShipmentExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  amount    Decimal        @db.Decimal(14, 2)
+  method    String         // transferencia | cheque | efectivo | tarjeta | otro
+  reference String?        // folio/SPEI/referencia bancaria
+  paidAt    DateTime       @default(now())
+  notes     String?
+  createdBy String?
+  createdAt DateTime       @default(now())
+
+  @@index([expenseId])
+  @@map("expense_payments")
+}
+
 model ShipmentEvent {
   id         String   @id @default(cuid())
   shipmentId String
@@ -246,7 +314,8 @@ model Invoice {
   status       InvoiceStatus @default(draft)
   kind         String        @default("service") // service (factura del servicio) | carta_porte (CFDI con complemento CP)
   subtotal     Decimal       @db.Decimal(12, 2)
-  tax          Decimal       @db.Decimal(12, 2)
+  tax          Decimal       @db.Decimal(12, 2) // IVA trasladado 16%
+  retention    Decimal       @default(0) @db.Decimal(12, 2) // IVA retenido 4% (autotransporte a PM)
   total        Decimal       @db.Decimal(12, 2)
   cfdiUse      String        @default("G03")
   paymentForm  String        @default("03")  // forma de pago SAT
@@ -254,7 +323,10 @@ model Invoice {
   items        Json?         // conceptos: [{ description, quantity, unitPrice, productCode, unitCode }]
   xmlContent   String?
   pdfUrl       String?
-  facturamaid  String?       // ID del comprobante en Facturama
+  facturamaid  String?       // ID interno del comprobante en Facturama
+  uuid         String?       // Folio fiscal (UUID del TimbreFiscalDigital) — identidad SAT del CFDI
+  satSerie     String?       // Serie real estampada en el CFDI (la que asigna el PAC)
+  satFolio     String?       // Folio real estampado en el CFDI (el que asigna el PAC)
   stampedAt    DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -278,12 +350,14 @@ model Supplier {
   contact   String?
   address   Json?
   notes     String?
+  creditTermsDays Int?     // días de crédito para calcular vencimiento de cuentas por pagar
   active    Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
   vehicles  Vehicle[]
   operators Operator[]
+  trailers  Trailer[]
 
   @@map("suppliers")
 }
@@ -322,6 +396,8 @@ model Merchandise {
   productKey  String?  // ClaveProdServCP — catálogo sat_product_key
   hsCode      String?  // FraccionArancelaria (comercio exterior)
   notes       String?
+  // Disposición de la partida: en tránsito / en custodia (bodega) / entregada al cliente final
+  status      String   @default("in_transit") // in_transit | in_custody | delivered
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -329,20 +405,38 @@ model Merchandise {
   containerId String?
   container   Container? @relation(fields: [containerId], references: [id], onDelete: SetNull)
 
-  // Asignación opcional a un tramo (Carta Porte por tramo)
+  // LEGADO (se conserva por compat; la verdad vive en MerchandiseLeg): primera asignación.
   legId       String?
   leg         ShipmentLeg? @relation(fields: [legId], references: [id], onDelete: SetNull)
-
-  // Asignación opcional a una unidad concreta del tramo: reparte la carga cuando
-  // el tramo se corre con varias unidades (p. ej. un full repartido en 2 sencillos).
   legVehicleId String?
   legVehicle   LegVehicle? @relation(fields: [legVehicleId], references: [id], onDelete: SetNull)
+
+  // Asignación a uno o varios tramos: la MISMA mercancía puede viajar en el tramo 1, 2, …
+  // El `status` (in_transit|in_custody|delivered) se DERIVA del progreso de estos tramos.
+  legAssignments MerchandiseLeg[]
 
   @@index([shipmentId])
   @@index([containerId])
   @@index([legId])
   @@index([legVehicleId])
   @@map("merchandise")
+}
+
+// Mercancía ↔ tramo (+ unidad opcional). Permite que una partida viaje en varios tramos.
+model MerchandiseLeg {
+  id            String      @id @default(cuid())
+  merchandiseId String
+  merchandise   Merchandise @relation(fields: [merchandiseId], references: [id], onDelete: Cascade)
+  legId         String
+  leg           ShipmentLeg @relation(fields: [legId], references: [id], onDelete: Cascade)
+  legVehicleId  String?     // unidad concreta del tramo (reparto de carga); opcional
+  legVehicle    LegVehicle? @relation(fields: [legVehicleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+
+  @@unique([merchandiseId, legId])
+  @@index([legId])
+  @@index([legVehicleId])
+  @@map("merchandise_legs")
 }
 
 // ─── Proceso / Workflow del expediente ───────────────────────────────────────
@@ -510,9 +604,10 @@ model ShipmentLeg {
   // El transporte vive en las unidades: un tramo puede correrse con 1..N unidades
   // (un sencillo, un full con 2 remolques, o 2 sencillos que reparten la carga).
   // Cada unidad foránea = un CFDI con complemento Carta Porte.
-  tasks       LegTask[]
-  vehicles    LegVehicle[]
-  merchandise Merchandise[]
+  tasks          LegTask[]
+  vehicles       LegVehicle[]
+  merchandise    Merchandise[]
+  merchandiseLegs MerchandiseLeg[]
 
   @@index([shipmentId])
   @@map("shipment_legs")
@@ -543,7 +638,8 @@ model LegVehicle {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  merchandise Merchandise[]
+  merchandise     Merchandise[]
+  merchandiseLegs MerchandiseLeg[]
 
   @@index([legId])
   @@map("leg_vehicles")
@@ -627,6 +723,25 @@ model Operator {
   @@map("operators")
 }
 
+// Remolque/semirremolque del proveedor (catálogo de remolques para el nodo Remolques de
+// Carta Porte). El transportista da de alta sus remolques y se eligen al asignar la unidad.
+model Trailer {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  plate     String  // Placa del remolque
+  subType   String? // SubTipoRem (c_SubTipoRem SAT, ej. CTR004 Caja seca)
+  notes     String?
+  status    String   @default("pending") // pending | authorized | suspended
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId, active])
+  @@map("trailers")
+}
+
 model CatalogItem {
   id        String   @id @default(cuid())
   category  String   // supplier_type | service_type | transport_mode | cargo_type | incoterm | port | sat_product_key | sat_unit_key | sat_cfdi_use | sat_payment_form | sat_payment_method
@@ -648,6 +763,8 @@ model Document {
   id           String   @id @default(cuid())
   entityType   String   // customer | supplier | shipment | invoice
   entityId     String
+  kind         String?  // tipo/clasificación (catálogo document_type) — p. ej. pod, factura
+  notes        String?  // observación al subir la evidencia
   originalName String
   mimeType     String
   size         Int
@@ -684,6 +801,31 @@ model Setting {
   updatedBy String?
 
   @@map("settings")
+}
+
+// Bitácora de auditoría: registra TODA mutación (POST/PUT/PATCH/DELETE) exitosa por usuario.
+// Se llena con un hook global onResponse (lib/audit.ts); inmutable (solo append + lectura).
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  // snapshot (no FK: el log sobrevive al borrado del usuario)
+  userName   String?
+  userEmail  String?
+  userRole   String?
+  action     String   // create | update | delete
+  method     String   // POST | PUT | PATCH | DELETE
+  path       String   // URL resuelta
+  route      String?  // patrón de ruta (/api/shipments/:id)
+  entityType String?  // derivado del path (shipments, invoices, ...)
+  entityId   String?
+  statusCode Int
+  ip         String?
+  meta       Json?    // cuerpo redactado/truncado (sin contraseñas/secretos)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────

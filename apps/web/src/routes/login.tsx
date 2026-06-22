@@ -36,12 +36,12 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[--color-muted] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-muted)] p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <div className="mb-3 flex items-center gap-3">
             <Logo size={44} tile className="text-white" />
-            <span className="text-2xl font-bold text-[--color-primary]">HM Sistema</span>
+            <span className="text-2xl font-bold text-[var(--color-primary)]">HM Sistema</span>
           </div>
           <CardTitle>Iniciar sesión</CardTitle>
         </CardHeader>
@@ -64,7 +64,7 @@ function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            {error && <p className="text-sm text-[--color-destructive]">{error}</p>}
+            {error && <p className="text-sm text-[var(--color-destructive)]">{error}</p>}
             <Button type="submit" loading={loading} className="w-full">
               Entrar
             </Button>

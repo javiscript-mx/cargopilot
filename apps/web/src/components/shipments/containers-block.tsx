@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { containersApi, type Container } from "@/api/containers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 import { validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY = { number: "", type: "", seal: "", tare: "", notes: "" }
@@ -15,6 +16,7 @@ const EMPTY = { number: "", type: "", seal: "", tare: "", notes: "" }
 export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; canEdit: boolean }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const { data: items = [] } = useQuery({
     queryKey: ["containers", shipmentId],
     queryFn: () => containersApi.list(shipmentId),
@@ -80,8 +82,8 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
     <div>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <ContainerIcon className="h-4 w-4 text-[--color-muted-foreground]" /> Contenedores
-          <span className="text-[--color-muted-foreground]">({items.length})</span>
+          <ContainerIcon className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Contenedores
+          <span className="text-[var(--color-muted-foreground)]">({items.length})</span>
         </h3>
         {canEdit && (
           <Button size="sm" variant="outline" className="flex items-center gap-1.5" onClick={openNew}>
@@ -118,27 +120,27 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
       )}
 
       {items.length === 0 ? (
-        <p className="py-3 text-center text-sm text-[--color-muted-foreground]">Sin contenedores registrados.</p>
+        <p className="py-3 text-center text-sm text-[var(--color-muted-foreground)]">Sin contenedores registrados.</p>
       ) : (
-        <div className="flex flex-col divide-y divide-[--color-border]">
+        <div className="flex flex-col divide-y divide-[var(--color-border)]">
           {items.map((c) => (
             <div key={c.id} className="flex items-center gap-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono font-medium">{c.number}</span>
-                  {typeLabel(c.type) && <span className="text-xs text-[--color-muted-foreground]">{typeLabel(c.type)}</span>}
+                  {typeLabel(c.type) && <span className="text-xs text-[var(--color-muted-foreground)]">{typeLabel(c.type)}</span>}
                 </div>
-                <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[--color-muted-foreground]">
+                <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[var(--color-muted-foreground)]">
                   {c.seal && <span>Sello: {c.seal}</span>}
                   {c.tare && <span>Tara: {parseFloat(c.tare).toLocaleString("es-MX")} kg</span>}
                 </div>
               </div>
               {canEdit && (
                 <div className="flex shrink-0 items-center gap-1">
-                  <button title="Editar" onClick={() => openEdit(c)} className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]">
+                  <button title="Editar" onClick={() => openEdit(c)} className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button title="Eliminar" onClick={() => { if (confirm(`¿Eliminar el contenedor ${c.number}?`)) deleteMutation.mutate(c.id) }} className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]">
+                  <button title="Eliminar" onClick={async () => { if (await confirm(`¿Eliminar el contenedor ${c.number}?`)) deleteMutation.mutate(c.id) }} className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)]">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

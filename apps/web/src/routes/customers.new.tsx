@@ -50,7 +50,7 @@ function NewCustomerPage() {
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/customers" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Clientes
         </Link>
         <h1 className="text-2xl font-bold">Nuevo cliente</h1>

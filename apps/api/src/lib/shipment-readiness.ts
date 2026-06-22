@@ -19,8 +19,9 @@ export interface ShipmentReadiness {
   locked: boolean
 }
 
-interface LocLike { zip?: string }
+interface LocLike { zip?: string; rfc?: string }
 const zip = (v: unknown): string | undefined => (v as LocLike | null)?.zip
+const rfc = (v: unknown): string | undefined => (v as LocLike | null)?.rfc
 
 export async function getShipmentReadiness(shipmentId: string): Promise<ShipmentReadiness | null> {
   const shipment = await prisma.shipment.findUnique({
@@ -29,7 +30,7 @@ export async function getShipmentReadiness(shipmentId: string): Promise<Shipment
   })
   if (!shipment) return null
 
-  const [legs, merchandise, quote, invoices, entregaTasks, doneTaskCount, docCount] = await Promise.all([
+  const [legs, merchandise, quote, invoices, entregaTasks, doneTaskCount, docCount, expenses] = await Promise.all([
     prisma.shipmentLeg.findMany({ where: { shipmentId }, orderBy: { order: "asc" }, include: { vehicles: true } }),
     prisma.merchandise.findMany({ where: { shipmentId } }),
     prisma.shipmentQuote.findUnique({ where: { shipmentId } }),
@@ -37,12 +38,22 @@ export async function getShipmentReadiness(shipmentId: string): Promise<Shipment
     prisma.legTask.findMany({ where: { shipmentId, code: "entrega" }, select: { status: true } }),
     prisma.legTask.count({ where: { shipmentId, status: "done" } }),
     prisma.document.count({ where: { entityType: "shipment", entityId: shipmentId } }),
+    prisma.shipmentExpense.findMany({ where: { shipmentId }, select: { id: true, reference: true } }),
   ])
+  // Evidencia de gastos: folio de factura (reference) o documento adjunto al gasto
+  const expenseDocs = expenses.length
+    ? await prisma.document.groupBy({ by: ["entityId"], where: { entityType: "expense", entityId: { in: expenses.map((e) => e.id) } }, _count: true })
+    : []
+  const expenseDocCount = new Map(expenseDocs.map((d) => [d.entityId, d._count]))
+  const expensesAllHaveEvidence = expenses.every((e) => Boolean(e.reference) || (expenseDocCount.get(e.id) ?? 0) > 0)
   // Bloqueo de cliente/tipo: por PROGRESO REAL (no por el workflow auto-aplicado ni el
   // evento "Expediente creado"). Un borrador recién creado aún se puede corregir.
   const locked = shipment.status !== "draft" || legs.length > 0 || invoices.length > 0 || doneTaskCount > 0
-  const stampedServiceInvoice = invoices.some((i) => i.kind === "service" && i.status === "stamped")
-  const hasServiceInvoice = invoices.some((i) => i.kind === "service")
+  // Factura de servicio al cliente = "service" o "invoice_cp" (servicio + complemento Carta Porte);
+  // la CFDI de CP por unidad ("carta_porte") NO cuenta como facturación del servicio.
+  const isServiceInvoice = (k: string) => k === "service" || k === "invoice_cp"
+  const stampedServiceInvoice = invoices.some((i) => isServiceInvoice(i.kind) && i.status === "stamped")
+  const hasServiceInvoice = invoices.some((i) => isServiceInvoice(i.kind))
 
   const c = shipment.customer
   const foraneoLegs = legs.filter((l) => l.scope === "foraneo")
@@ -65,6 +76,8 @@ export async function getShipmentReadiness(shipmentId: string): Promise<Shipment
   push("ruta", "Ruta y tramos", [
     { label: "Al menos un tramo", ok: legs.length > 0 },
     { label: "Origen y destino en cada tramo", ok: legs.length > 0 && legs.every((l) => Boolean(zip(l.origin) && zip(l.destination))) },
+    // Carta Porte exige RFC de remitente y destinatario en los tramos foráneos
+    { label: "RFC de remitente y destinatario (tramos foráneos)", ok: !hasForaneo || foraneoLegs.every((l) => Boolean(rfc(l.origin) && rfc(l.destination))) },
   ])
 
   push("mercancia", "Mercancía", [
@@ -95,6 +108,7 @@ export async function getShipmentReadiness(shipmentId: string): Promise<Shipment
   push("cierre", "Cierre / POD", [
     { label: "Entrega confirmada en cada tramo", ok: entregaTasks.length > 0 && entregaTasks.every((t) => t.status === "done") },
     { label: "Evidencia documental cargada (POD/acuse)", ok: docCount > 0 },
+    { label: "Todos los gastos con comprobante (factura o documento)", ok: expensesAllHaveEvidence },
   ])
 
   const block = (key: string) => blocks.find((b) => b.key === key)!

@@ -10,8 +10,7 @@ import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { DocumentsSection } from "@/components/ui/documents-section"
 import { CargoSection } from "@/components/shipments/cargo-section"
 import { ReadinessBar } from "@/components/shipments/readiness-panel"
-import { QuotePanel } from "@/components/shipments/quote-panel"
-import { InvoicePanel } from "@/components/shipments/invoice-panel"
+import { FiscalSection } from "@/components/shipments/fiscal-section"
 import { ProcessSection } from "@/components/shipments/process-section"
 import { LogSection } from "@/components/shipments/log-section"
 import { SummaryTab } from "@/components/shipments/summary-tab"
@@ -20,6 +19,7 @@ import { useCatalog } from "@/hooks/use-catalog"
 import { useCan } from "@/lib/permissions"
 import { ApiError } from "@/lib/api-client"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 
 export const Route = createFileRoute("/shipments/$id/")({
   component: ShipmentDetailPage,
@@ -40,6 +40,7 @@ function ShipmentDetailPage() {
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const { can } = useCan()
   const canEdit = can("shipments.write")
   const canChangeStatus = can("shipments.changeStatus")
@@ -67,14 +68,14 @@ function ShipmentDetailPage() {
   })
 
   if (isLoading) {
-    return <AppLayout><div className="flex items-center justify-center py-20 text-[--color-muted-foreground]">Cargando...</div></AppLayout>
+    return <AppLayout><div className="flex items-center justify-center py-20 text-[var(--color-muted-foreground)]">Cargando...</div></AppLayout>
   }
   if (!shipment) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <Package className="h-12 w-12 opacity-30" />
-          <p className="text-[--color-muted-foreground]">Expediente no encontrado</p>
+          <p className="text-[var(--color-muted-foreground)]">Expediente no encontrado</p>
           <Link to="/shipments"><Button variant="outline">Volver</Button></Link>
         </div>
       </AppLayout>
@@ -103,15 +104,15 @@ function ShipmentDetailPage() {
     <AppLayout>
       {/* ── Cabecera operativa ── */}
       <div className="mb-4">
-        <Link to="/shipments" className="mb-3 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/shipments" className="mb-3 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Expedientes
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <h1 className="font-mono text-2xl font-bold">{shipment.folio}</h1>
             <Badge variant={status.variant}>{status.label}</Badge>
-            <span className="text-sm text-[--color-muted-foreground]">{shipment.customer.name}</span>
-            <span className="text-sm text-[--color-muted-foreground]">· {operationLabel}</span>
+            <span className="text-sm text-[var(--color-muted-foreground)]">{shipment.customer.name}</span>
+            <span className="text-sm text-[var(--color-muted-foreground)]">· {operationLabel}</span>
           </div>
           {(canEdit || canChangeStatus) && (
             <div className="flex flex-wrap gap-2">
@@ -128,7 +129,7 @@ function ShipmentDetailPage() {
                   <Button key={next} variant={next === "cancelled" ? "destructive" : "default"} size="sm"
                     loading={statusMutation.isPending} disabled={blocked}
                     title={blocked ? `Faltan ${missingN} dato(s): ${gate?.missing.join(" · ")}` : undefined}
-                    onClick={() => { if (next === "cancelled" && !confirm("¿Cancelar este expediente?")) return; statusMutation.mutate(next) }}>
+                    onClick={async () => { if (next === "cancelled" && !(await confirm({ title: "Cancelar expediente", description: "¿Cancelar este expediente?", destructive: true, confirmLabel: "Cancelar expediente", cancelLabel: "No" }))) return; statusMutation.mutate(next) }}>
                     {transitionLabels[next]}{blocked ? ` · faltan ${missingN}` : ""}
                   </Button>
                 )
@@ -136,6 +137,24 @@ function ShipmentDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Qué falta para el siguiente estado (no solo "faltan N") */}
+        {canChangeStatus && (() => {
+          const blockedNext = nextStatuses
+            .filter((n) => n !== "cancelled")
+            .map((n) => ({ n, gate: gateFor(n) }))
+            .filter((x) => x.gate && !x.gate.ok)
+          if (!blockedNext.length) return null
+          return (
+            <div className="mt-2 flex flex-col gap-1">
+              {blockedNext.map(({ n, gate }) => (
+                <p key={n} className="text-xs text-[var(--color-muted-foreground)]">
+                  Para <span className="font-medium text-[var(--color-foreground)]">{transitionLabels[n]}</span> falta: {gate!.missing.join(" · ")}
+                </p>
+              ))}
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── Barra de control (siguiente acción + semáforos + faltantes) ── */}
@@ -151,13 +170,7 @@ function ShipmentDetailPage() {
               {tab === "plan" && <ProcessSection shipmentId={id} locked={cancelled} view="flow" bare onGoToTab={setTab} />}
               {tab === "transporte" && <ProcessSection shipmentId={id} locked={cancelled} view="transport" bare onGoToTab={setTab} />}
               {tab === "carga" && <CargoSection shipmentId={id} cargoType={shipment.cargoType} canEdit={canEdit} bare />}
-              {tab === "fiscal" && (
-                <div className="flex flex-col gap-4">
-                  {/* Tarifa editable inline (a todo el ancho de la pestaña, no en un drawer angosto) */}
-                  <QuotePanel shipmentId={id} />
-                  <InvoicePanel shipmentId={id} />
-                </div>
-              )}
+              {tab === "fiscal" && <FiscalSection shipmentId={id} />}
               {tab === "evidencias" && <DocumentsSection entityType="shipment" entityId={id} readOnly={!canWriteDocuments} bare />}
               {tab === "bitacora" && <LogSection shipmentId={id} canEdit={canEdit} canDelete={canDelete} />}
             </div>
@@ -190,12 +203,12 @@ function ContextSidebar({ customerId, customerName, rfc, reference, description,
       <CardContent className="flex flex-col gap-3 text-sm">
         <div>
           <p className="font-medium">{customerName}</p>
-          <p className="font-mono text-xs text-[--color-muted-foreground]">{rfc}</p>
-          <Link to="/customers/$id" params={{ id: customerId }} className="mt-1 inline-block text-xs text-[--color-primary] hover:underline">
+          <p className="font-mono text-xs text-[var(--color-muted-foreground)]">{rfc}</p>
+          <Link to="/customers/$id" params={{ id: customerId }} className="mt-1 inline-block text-xs text-[var(--color-primary)] hover:underline">
             Ver cliente →
           </Link>
         </div>
-        <div className="flex flex-col gap-2 border-t border-[--color-border] pt-3">
+        <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3">
           {reference && <Row label="Referencia" value={<span className="font-mono text-xs">{reference}</span>} />}
           {description && <Row label="Servicio" value={description} />}
           <Row label="Creado" value={new Date(createdAt).toLocaleDateString("es-MX")} />
@@ -209,7 +222,7 @@ function ContextSidebar({ customerId, customerName, rfc, reference, description,
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="shrink-0 text-[--color-muted-foreground]">{label}</span>
+      <span className="shrink-0 text-[var(--color-muted-foreground)]">{label}</span>
       <span className="min-w-0 text-right font-medium">{value}</span>
     </div>
   )

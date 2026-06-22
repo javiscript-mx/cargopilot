@@ -41,26 +41,26 @@ export function StampDialog({ invoice, onClose }: StampDialogProps) {
           </p>
         </div>
 
-        <div className="rounded-md border border-[--color-border] p-4 text-sm">
+        <div className="rounded-md border border-[var(--color-border)] p-4 text-sm">
           <div className="mb-3 flex justify-between">
-            <span className="font-medium text-[--color-muted-foreground]">Folio</span>
+            <span className="font-medium text-[var(--color-muted-foreground)]">Folio</span>
             <span className="font-mono font-semibold">{invoice.series}-{invoice.folio}</span>
           </div>
           <div className="mb-3 flex justify-between">
-            <span className="font-medium text-[--color-muted-foreground]">Cliente</span>
+            <span className="font-medium text-[var(--color-muted-foreground)]">Cliente</span>
             <span>{invoice.customer.name}</span>
           </div>
           <div className="mb-3 flex justify-between">
-            <span className="font-medium text-[--color-muted-foreground]">RFC</span>
+            <span className="font-medium text-[var(--color-muted-foreground)]">RFC</span>
             <span className="font-mono">{invoice.customer.rfc}</span>
           </div>
-          <div className="mb-1 flex justify-between text-[--color-muted-foreground]">
+          <div className="mb-1 flex justify-between text-[var(--color-muted-foreground)]">
             <span>Subtotal</span><span>{fmt(subtotal)}</span>
           </div>
-          <div className="mb-1 flex justify-between text-[--color-muted-foreground]">
+          <div className="mb-1 flex justify-between text-[var(--color-muted-foreground)]">
             <span>IVA 16%</span><span>{fmt(tax)}</span>
           </div>
-          <div className="mt-2 flex justify-between border-t border-[--color-border] pt-2 font-bold">
+          <div className="mt-2 flex justify-between border-t border-[var(--color-border)] pt-2 font-bold">
             <span>Total</span><span>{fmt(total)}</span>
           </div>
         </div>

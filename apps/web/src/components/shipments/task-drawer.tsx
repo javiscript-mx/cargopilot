@@ -84,8 +84,8 @@ export function TaskDrawer({
       {/* La cotización y la facturación se gestionan en la pestaña Fiscal: aquí solo
           se marca el avance del paso (no se duplica el formulario). */}
       {fiscalTask && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-[--color-border] bg-[--color-muted]/40 p-3">
-          <p className="text-sm text-[--color-muted-foreground]">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3">
+          <p className="text-sm text-[var(--color-muted-foreground)]">
             {task.kind === "quote" ? "La tarifa se captura en la pestaña Fiscal." : "La factura se genera y timbra en la pestaña Fiscal."}
           </p>
           {onGoToTab && (
@@ -111,17 +111,17 @@ export function TaskDrawer({
             : (task.isMilestone ? "Fecha real del hito" : "Fecha de realización")}
           type="datetime-local" value={form.actualAt} onChange={set("actualAt")}
         />
-        <p className="-mt-2 text-xs text-[--color-muted-foreground]">
+        <p className="-mt-2 text-xs text-[var(--color-muted-foreground)]">
           {isExecutionTask
             ? "Se guarda como la fecha oficial del tramo (alimenta Carta Porte y el cierre)."
             : "Puedes registrar una fecha pasada (p. ej. la recolección fue ayer)."}
         </p>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="notes" className="text-sm font-medium text-[--color-foreground]">Notas</label>
+          <label htmlFor="notes" className="text-sm font-medium text-[var(--color-foreground)]">Notas</label>
           <textarea
             id="notes" rows={3} value={form.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            className="w-full rounded-md border border-[--color-border] bg-[--color-background] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--color-primary]"
+            className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
           />
         </div>
       </form>

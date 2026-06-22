@@ -1,14 +1,21 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, History, Pencil } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { MoneyInput } from "@/components/ui/money-input"
 import { useToast } from "@/components/ui/toast"
 import { useCan } from "@/lib/permissions"
 import { useCatalog } from "@/hooks/use-catalog"
+import { personaFromRfc } from "@/lib/fiscal"
+import { computeTaxes } from "@/lib/taxes"
+import { shipmentsApi } from "@/api/shipments"
+import { invoicesApi } from "@/api/invoices"
 import { quotesApi, type QuoteItem, type QuoteStatus } from "@/api/quotes"
+
+const today = () => new Date().toISOString().slice(0, 10)
 
 const STATUS_OPTIONS: { value: QuoteStatus; label: string }[] = [
   { value: "draft", label: "Borrador" },
@@ -39,20 +46,27 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
     queryKey: ["quote", shipmentId],
     queryFn: () => quotesApi.get(shipmentId),
   })
+  // Persona del receptor (cliente) para la retención de IVA — 12=moral, 13=física
+  const { data: shipment } = useQuery({ queryKey: ["shipments", shipmentId], queryFn: () => shipmentsApi.get(shipmentId) })
+  const receptor = personaFromRfc(shipment?.customer?.rfc)
+  // Conciliación: lo facturado al cliente (facturas timbradas) vs lo cotizado
+  const { data: invoices = [] } = useQuery({ queryKey: ["invoices", "shipment", shipmentId], queryFn: () => invoicesApi.listByShipment(shipmentId) })
+  const { data: revisions = [] } = useQuery({ queryKey: ["quote-revisions", shipmentId], queryFn: () => quotesApi.revisions(shipmentId) })
 
   const [form, setForm] = useState<{
-    status: QuoteStatus; currency: string; validUntil: string; estimatedCost: string; notes: string; items: QuoteItem[]
+    status: QuoteStatus; currency: string; validUntil: string; notes: string; items: QuoteItem[]
   } | null>(null)
 
   // Inicializa el form una vez resuelta la query (o con defaults si no hay cotización)
   const [initialized, setInitialized] = useState(false)
+  // null = automático (compacto si ya hay tarifa); true/false = el usuario forzó editar/cerrar
+  const [editOverride, setEditOverride] = useState<boolean | null>(null)
   if (!isLoading && !initialized) {
     setInitialized(true)
     setForm({
       status: quote?.status ?? "draft",
       currency: quote?.currency ?? shipmentCurrency ?? "MXN",
       validUntil: toDateInput(quote?.validUntil ?? null),
-      estimatedCost: quote?.estimatedCost ?? "",
       notes: quote?.notes ?? "",
       items: quote?.items?.length ? quote.items : [{ concept: "Flete", amount: 0, productKey: "78101800" }],
     })
@@ -61,17 +75,25 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
   const save = useMutation({
     mutationFn: () => {
       const f = form!
+      // El costo a nivel cotización = suma de costos por servicio (compatibilidad con resumen/readiness)
+      const totalCost = f.items.reduce((a, i) => a + (Number(i.estimatedCost) || 0), 0)
       return quotesApi.save(shipmentId, {
         status: f.status,
         currency: f.currency,
         validUntil: f.validUntil ? new Date(f.validUntil).toISOString() : null,
-        estimatedCost: f.estimatedCost ? Number(f.estimatedCost) : null,
+        estimatedCost: totalCost || null,
         notes: f.notes.trim() || null,
-        items: f.items.filter((i) => i.concept.trim() || i.amount).map((i) => ({ concept: i.concept.trim(), amount: Number(i.amount) || 0, ...(i.productKey ? { productKey: i.productKey } : {}) })),
+        items: f.items.filter((i) => i.concept.trim() || i.amount).map((i) => ({
+          concept: i.concept.trim(),
+          amount: Number(i.amount) || 0,
+          ...(i.productKey ? { productKey: i.productKey } : {}),
+          ...(i.estimatedCost ? { estimatedCost: Number(i.estimatedCost) } : {}),
+        })),
       })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quote", shipmentId] })
+      queryClient.invalidateQueries({ queryKey: ["quote-revisions", shipmentId] })
       queryClient.invalidateQueries({ queryKey: ["readiness", shipmentId] })
       toast.success("Cotización guardada")
     },
@@ -79,29 +101,48 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
   })
 
   if (isLoading || !form) {
-    return <div className="rounded-md border border-[--color-border] p-4 text-sm text-[--color-muted-foreground]">Cargando cotización...</div>
+    return <div className="rounded-md border border-[var(--color-border)] p-4 text-sm text-[var(--color-muted-foreground)]">Cargando cotización...</div>
   }
 
-  const sellTotal = form.items.reduce((acc, i) => acc + (Number(i.amount) || 0), 0)
-  const cost = Number(form.estimatedCost) || 0
+  const tax = computeTaxes(form.items.map((i) => ({ amount: Number(i.amount) || 0, productCode: i.productKey })), receptor)
+  const sellTotal = tax.subtotal
+  const cost = form.items.reduce((a, i) => a + (Number(i.estimatedCost) || 0), 0)
   const margin = sellTotal - cost
   const marginPct = sellTotal > 0 ? (margin / sellTotal) * 100 : 0
   const money = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: form.currency })
 
+  // Conciliación cotizado ↔ facturado (subtotales, sin IVA). Facturas timbradas = lo ya facturado.
+  const stampedInvoices = invoices.filter((i) => i.status === "stamped")
+  const facturado = stampedInvoices.reduce((a, i) => a + parseFloat(i.subtotal), 0)
+  const pendientePorFacturar = sellTotal - facturado
+  const facturadoPct = sellTotal > 0 ? Math.min(100, (facturado / sellTotal) * 100) : 0
+
   const setItem = (idx: number, patch: Partial<QuoteItem>) =>
     setForm((f) => f && { ...f, items: f.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) })
 
+  // Vista compacta por defecto cuando ya hay tarifa guardada; se expande al editar.
+  const savedHasCharges = (quote?.items ?? []).some((i) => Number(i.amount) > 0)
+  const isEditing = editOverride ?? !savedHasCharges
+
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-[--color-border] p-4">
+    <section className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Cotización / tarifa</h4>
-        <Badge variant={STATUS_VARIANT[form.status]}>{STATUS_OPTIONS.find((s) => s.value === form.status)?.label}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={STATUS_VARIANT[form.status]}>{STATUS_OPTIONS.find((s) => s.value === form.status)?.label}</Badge>
+          {canEdit && (
+            isEditing
+              ? (savedHasCharges && <Button type="button" size="sm" variant="outline" onClick={() => setEditOverride(false)}>Listo</Button>)
+              : <Button type="button" size="sm" variant="outline" onClick={() => setEditOverride(true)}><Pencil className="h-3 w-3" /> Editar tarifa</Button>
+          )}
+        </div>
       </div>
 
+      {isEditing && (<>
       <div className="grid grid-cols-3 gap-3">
         <Select id="q-status" label="Estado" options={STATUS_OPTIONS} value={form.status} onChange={(e) => setForm((f) => f && { ...f, status: e.target.value as QuoteStatus })} disabled={!canEdit} />
         <Select id="q-currency" label="Moneda" options={currencyOptions} value={form.currency} onChange={(e) => setForm((f) => f && { ...f, currency: e.target.value })} disabled={!canEdit} />
-        <Input id="q-valid" label="Vigencia" type="date" value={form.validUntil} onChange={(e) => setForm((f) => f && { ...f, validUntil: e.target.value })} disabled={!canEdit} />
+        <Input id="q-valid" label="Vigencia" type="date" min={today()} value={form.validUntil} onChange={(e) => setForm((f) => f && { ...f, validUntil: e.target.value })} disabled={!canEdit} />
       </div>
 
       {/* Cargos al cliente */}
@@ -115,46 +156,116 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
           )}
         </div>
         <div className="flex flex-col gap-3">
-          {form.items.map((it, idx) => (
-            <div key={idx} className="flex flex-col gap-1.5 rounded-md border border-[--color-border] p-2">
-              <div className="grid grid-cols-[1fr_120px_32px] items-center gap-2">
-                <Input id={`q-c-${idx}`} placeholder="Concepto (flete, maniobras, casetas...)" value={it.concept} onChange={(e) => setItem(idx, { concept: e.target.value })} disabled={!canEdit} />
-                <Input id={`q-a-${idx}`} type="number" min="0" step="0.01" placeholder="Monto" value={String(it.amount)} onChange={(e) => setItem(idx, { amount: Number(e.target.value) })} disabled={!canEdit} />
+          {form.items.map((it, idx) => {
+            const itMargin = (Number(it.amount) || 0) - (Number(it.estimatedCost) || 0)
+            return (
+            <div key={idx} className="flex flex-col gap-1.5 rounded-md border border-[var(--color-border)] p-2">
+              <div className="flex items-center gap-2">
+                <Input id={`q-c-${idx}`} className="flex-1" placeholder="Concepto (flete, maniobras, casetas...)" value={it.concept} onChange={(e) => setItem(idx, { concept: e.target.value })} disabled={!canEdit} />
                 {canEdit && (
                   <button type="button" onClick={() => setForm((f) => f && { ...f, items: f.items.filter((_, i) => i !== idx) })}
-                    className="flex h-8 w-8 items-center justify-center rounded text-[--color-muted-foreground] hover:bg-red-50 hover:text-[--color-destructive] disabled:opacity-30"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-red-50 hover:text-[var(--color-destructive)] disabled:opacity-30"
                     disabled={form.items.length === 1}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <MoneyInput id={`q-a-${idx}`} label="Venta al cliente" currency={form.currency} value={String(it.amount ?? "")} onChange={(v) => setItem(idx, { amount: Number(v) || 0 })} disabled={!canEdit} />
+                <MoneyInput id={`q-cost-${idx}`} label="Costo estimado (sin IVA)" currency={form.currency} value={it.estimatedCost != null ? String(it.estimatedCost) : ""} onChange={(v) => setItem(idx, { estimatedCost: Number(v) || 0 })} disabled={!canEdit} />
+              </div>
               <Select id={`q-p-${idx}`} options={productOptions} value={it.productKey ?? "78101800"}
                 onChange={(e) => setItem(idx, { productKey: e.target.value })} disabled={!canEdit}
                 placeholder="Clave SAT del servicio" />
+              {(Number(it.amount) || Number(it.estimatedCost)) ? (
+                <p className="text-right text-xs text-[var(--color-muted-foreground)]">
+                  Margen del servicio: <span className={itMargin < 0 ? "font-medium text-[var(--color-destructive)]" : "font-medium text-green-600"}>{money(itMargin)}</span>
+                </p>
+              ) : null}
             </div>
-          ))}
+          )})}
         </div>
       </div>
+      </>)}
 
-      <Input id="q-cost" label="Costo estimado (flete + casetas)" type="number" min="0" step="0.01" value={form.estimatedCost} onChange={(e) => setForm((f) => f && { ...f, estimatedCost: e.target.value })} disabled={!canEdit} />
-
-      {/* Resumen / margen */}
-      <div className="rounded-md bg-[--color-muted] p-3 text-sm">
-        <div className="flex justify-between text-[--color-muted-foreground]"><span>Venta al cliente</span><span>{money(sellTotal)}</span></div>
-        <div className="flex justify-between text-[--color-muted-foreground]"><span>Costo estimado</span><span>{money(cost)}</span></div>
-        <div className="mt-1 flex justify-between border-t border-[--color-border] pt-1 font-semibold">
-          <span>Margen</span>
-          <span className={margin < 0 ? "text-[--color-destructive]" : "text-green-600"}>{money(margin)} · {marginPct.toFixed(1)}%</span>
+      {/* Resumen fiscal + utilidad real (IVA y retención son traslado/acreditables: no afectan la utilidad) */}
+      <div className="rounded-md bg-[var(--color-muted)] p-3 text-sm">
+        <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Subtotal (venta)</span><span>{money(tax.subtotal)}</span></div>
+        <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>IVA (16%)</span><span>{money(tax.ivaTraslado)}</span></div>
+        {tax.retentionApplies && (
+          <div className="flex justify-between text-[var(--color-muted-foreground)]">
+            <span>Retención IVA (4% autotransporte)</span><span>− {money(tax.ivaRetencion)}</span>
+          </div>
+        )}
+        <div className="mt-1 flex justify-between border-t border-[var(--color-border)] pt-1 font-semibold">
+          <span>Total a cobrar al cliente</span><span>{money(tax.total)}</span>
         </div>
+        <div className="mt-2 flex justify-between border-t border-[var(--color-border)] pt-2 text-[var(--color-muted-foreground)]"><span>Costo estimado total</span><span>{money(cost)}</span></div>
+        <div className="flex justify-between font-semibold">
+          <span>Utilidad real</span>
+          <span className={margin < 0 ? "text-[var(--color-destructive)]" : "text-green-600"}>{money(margin)} · {marginPct.toFixed(1)}%</span>
+        </div>
+        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">El IVA y la retención no afectan la utilidad (son impuestos trasladados/acreditables). Captura los costos sin IVA.</p>
       </div>
 
-      <Input id="q-notes" label="Notas (opcional)" value={form.notes} onChange={(e) => setForm((f) => f && { ...f, notes: e.target.value })} disabled={!canEdit} />
-
-      {canEdit && (
-        <div className="flex justify-end">
-          <Button type="button" size="sm" loading={save.isPending} onClick={() => save.mutate()}>Guardar cotización</Button>
+      {/* Conciliación cotizado ↔ facturado (subtotales sin IVA) */}
+      <div className="rounded-md border border-[var(--color-border)] p-3 text-sm">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-medium">Conciliación cotizado ↔ facturado</span>
+          {sellTotal > 0 && (
+            <Badge variant={pendientePorFacturar <= 0.01 ? "success" : "warning"}>
+              {pendientePorFacturar <= 0.01 ? "Facturado completo" : "Falta por facturar"}
+            </Badge>
+          )}
         </div>
+        <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Cotizado (sin IVA)</span><span>{money(sellTotal)}</span></div>
+        <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Facturado timbrado ({stampedInvoices.length})</span><span>{money(facturado)}</span></div>
+        <div className="flex justify-between font-medium"><span>Pendiente por facturar</span><span className={pendientePorFacturar > 0.01 ? "text-amber-600" : "text-green-600"}>{money(Math.max(0, pendientePorFacturar))}</span></div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-muted)]">
+          <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${facturadoPct}%` }} />
+        </div>
+        <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
+          Suma de las facturas timbradas del expediente (puede ser una o varias).{pendientePorFacturar < -0.01 ? " Se facturó de más respecto a lo cotizado." : ""}
+        </p>
+      </div>
+
+      {/* Historial de cambios de la cotización */}
+      {revisions.length > 0 && (
+        <details className="rounded-md border border-[var(--color-border)] p-3 text-sm">
+          <summary className="flex cursor-pointer items-center gap-1.5 font-medium">
+            <History className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Historial de la cotización ({revisions.length})
+          </summary>
+          <div className="mt-2 flex flex-col divide-y divide-[var(--color-border)]">
+            {revisions.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs text-[var(--color-muted-foreground)]">v{r.version}</span>
+                  <Badge variant={STATUS_VARIANT[r.status]}>{STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status}</Badge>
+                  <span className="text-xs text-[var(--color-muted-foreground)]">{new Date(r.createdAt).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                </span>
+                <span className="font-medium tabular-nums">{Number(r.subtotal).toLocaleString("es-MX", { style: "currency", currency: r.currency })}</span>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
+
+      {isEditing && (<>
+        <Input id="q-notes" label="Notas (opcional)" value={form.notes} onChange={(e) => setForm((f) => f && { ...f, notes: e.target.value })} disabled={!canEdit} />
+
+        {canEdit && (
+          <div className="flex justify-end">
+            <Button type="button" size="sm" loading={save.isPending} onClick={() => {
+              if (form.validUntil && form.validUntil < today()) {
+                toast.error("Vigencia inválida", "La vigencia de la tarifa no puede ser una fecha pasada.")
+                return
+              }
+              save.mutate()
+              setEditOverride(false)
+            }}>Guardar cotización</Button>
+          </div>
+        )}
+      </>)}
     </section>
   )
 }

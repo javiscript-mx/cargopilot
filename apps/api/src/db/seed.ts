@@ -49,6 +49,31 @@ const CATALOG_SEEDS: { category: string; code: string; name: string; extra?: Pri
   { category: "milestone", code: "INCIDENT",        name: "Incidencia / Retraso" },
   { category: "milestone", code: "DOCS_COMPLETE",   name: "Documentación completa" },
 
+  // Tipos de documento / evidencia (se elige al subir un archivo)
+  { category: "document_type", code: "evidencia_recoleccion", name: "Evidencia de recolección" },
+  { category: "document_type", code: "pod",                   name: "POD / acuse de entrega" },
+  { category: "document_type", code: "factura",               name: "Factura / CFDI" },
+  { category: "document_type", code: "cfdi_carta_porte",      name: "CFDI Carta Porte" },
+  { category: "document_type", code: "cotizacion",            name: "Cotización" },
+  { category: "document_type", code: "constancia_fiscal",     name: "Constancia de situación fiscal" },
+  { category: "document_type", code: "contrato",              name: "Contrato / convenio" },
+  { category: "document_type", code: "identificacion",        name: "Identificación" },
+  { category: "document_type", code: "carta_instruccion",     name: "Carta de instrucción" },
+  { category: "document_type", code: "foto_mercancia",        name: "Foto de mercancía" },
+  { category: "document_type", code: "otro",                  name: "Otro" },
+
+  // Categorías de gasto/costo del expediente (conciliación de costos)
+  { category: "expense_category", code: "flete",       name: "Flete (transportista)" },
+  { category: "expense_category", code: "casetas",     name: "Casetas / peajes" },
+  { category: "expense_category", code: "combustible", name: "Combustible" },
+  { category: "expense_category", code: "maniobras",   name: "Maniobras" },
+  { category: "expense_category", code: "custodia",    name: "Custodia" },
+  { category: "expense_category", code: "almacenaje",  name: "Almacenaje" },
+  { category: "expense_category", code: "seguro",      name: "Seguro de carga" },
+  { category: "expense_category", code: "estadias",    name: "Estadías / demoras" },
+  { category: "expense_category", code: "aduana",      name: "Gastos aduanales" },
+  { category: "expense_category", code: "otro",        name: "Otro gasto" },
+
   // Modos de transporte
   { category: "transport_mode", code: "AIR",    name: "Aéreo" },
   { category: "transport_mode", code: "SEA",    name: "Marítimo" },
@@ -161,6 +186,40 @@ const CATALOG_SEEDS: { category: string; code: string; name: string; extra?: Pri
   { category: "cp_perm_sct", code: "TPAF04", name: "TPAF04 - Materiales y residuos peligrosos" },
   { category: "cp_perm_sct", code: "TPAF05", name: "TPAF05 - Objetos voluminosos y/o de gran peso" },
   { category: "cp_perm_sct", code: "TPXX00", name: "TPXX00 - Permiso no contemplado en el catálogo" },
+
+  // Carta Porte — Subtipo de remolque/semirremolque (c_SubTipoRem)
+  { category: "cp_subtipo_remolque", code: "CTR001", name: "CTR001 - Caja" },
+  { category: "cp_subtipo_remolque", code: "CTR002", name: "CTR002 - Caja Abierta" },
+  { category: "cp_subtipo_remolque", code: "CTR003", name: "CTR003 - Caja Cerrada" },
+  { category: "cp_subtipo_remolque", code: "CTR004", name: "CTR004 - Caja De Recolección Con Cargador Frontal" },
+  { category: "cp_subtipo_remolque", code: "CTR005", name: "CTR005 - Caja Refrigerada" },
+  { category: "cp_subtipo_remolque", code: "CTR006", name: "CTR006 - Caja Seca" },
+  { category: "cp_subtipo_remolque", code: "CTR007", name: "CTR007 - Caja Transferencia" },
+  { category: "cp_subtipo_remolque", code: "CTR008", name: "CTR008 - Cama Baja o Cuello Ganso" },
+  { category: "cp_subtipo_remolque", code: "CTR009", name: "CTR009 - Chasis Portacontenedor" },
+  { category: "cp_subtipo_remolque", code: "CTR010", name: "CTR010 - Convencional De Chasis" },
+  { category: "cp_subtipo_remolque", code: "CTR011", name: "CTR011 - Equipo Especial" },
+  { category: "cp_subtipo_remolque", code: "CTR012", name: "CTR012 - Estacas" },
+  { category: "cp_subtipo_remolque", code: "CTR013", name: "CTR013 - Góndola Madrina" },
+  { category: "cp_subtipo_remolque", code: "CTR014", name: "CTR014 - Grúa" },
+  { category: "cp_subtipo_remolque", code: "CTR015", name: "CTR015 - Grúa Industrial" },
+  { category: "cp_subtipo_remolque", code: "CTR016", name: "CTR016 - Integral" },
+  { category: "cp_subtipo_remolque", code: "CTR017", name: "CTR017 - Jaula" },
+  { category: "cp_subtipo_remolque", code: "CTR018", name: "CTR018 - Media Redila" },
+  { category: "cp_subtipo_remolque", code: "CTR019", name: "CTR019 - Pallet o Celdillas" },
+  { category: "cp_subtipo_remolque", code: "CTR020", name: "CTR020 - Plataforma" },
+  { category: "cp_subtipo_remolque", code: "CTR021", name: "CTR021 - Plataforma Con Grúa" },
+  { category: "cp_subtipo_remolque", code: "CTR022", name: "CTR022 - Plataforma Encortinada" },
+  { category: "cp_subtipo_remolque", code: "CTR023", name: "CTR023 - Rabón" },
+  { category: "cp_subtipo_remolque", code: "CTR024", name: "CTR024 - Refrigerador" },
+  { category: "cp_subtipo_remolque", code: "CTR025", name: "CTR025 - Revolvedora" },
+  { category: "cp_subtipo_remolque", code: "CTR026", name: "CTR026 - Semirremolque" },
+  { category: "cp_subtipo_remolque", code: "CTR027", name: "CTR027 - Tanque" },
+  { category: "cp_subtipo_remolque", code: "CTR028", name: "CTR028 - Tolva" },
+  { category: "cp_subtipo_remolque", code: "CTR029", name: "CTR029 - Tractocamión" },
+  { category: "cp_subtipo_remolque", code: "CTR030", name: "CTR030 - Vehículo Ligero De Carga" },
+  { category: "cp_subtipo_remolque", code: "CTR031", name: "CTR031 - Volteo" },
+  { category: "cp_subtipo_remolque", code: "CTR032", name: "CTR032 - Volteo Desmontable" },
 ]
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -171,11 +230,20 @@ async function main() {
   // Admin por defecto
   const existing = await prisma.user.findUnique({ where: { email: "admin@hmsistema.mx" } })
   if (!existing) {
+    // En producción NO se permite la contraseña por defecto ni una débil: el seed se
+    // corre fuera del server, así que el guard de entorno de index.ts no lo cubre.
+    const seedPassword = process.env["ADMIN_SEED_PASSWORD"]
+    const isProd = process.env["NODE_ENV"] === "production"
+    if (isProd && (!seedPassword || seedPassword.length < 12 || seedPassword === "Admin1234!")) {
+      throw new Error(
+        "ADMIN_SEED_PASSWORD ausente o débil. Define una contraseña fuerte (≥12 caracteres, distinta del default) antes de sembrar el admin en producción.",
+      )
+    }
     await auth.api.signUpEmail({
       body: {
         name: "Administrador",
         email: "admin@hmsistema.mx",
-        password: process.env["ADMIN_SEED_PASSWORD"] ?? "Admin1234!",
+        password: seedPassword ?? "Admin1234!",
       },
     })
     await prisma.user.update({

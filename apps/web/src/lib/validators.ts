@@ -127,12 +127,12 @@ export function collectErrors(checks: Record<string, string | undefined>): Recor
 
 /**
  * Lleva la vista al primer campo con error tras un submit bloqueado.
- * Los componentes Input/Select renderizan el error como `<p class="text-[--color-destructive]">`.
+ * Los componentes Input/Select renderizan el error como `<p class="text-[var(--color-destructive)]">`.
  * El timeout deja que React pinte los errores antes de buscarlos.
  */
 export function scrollToFirstError(): void {
   setTimeout(() => {
-    const first = document.querySelector(".text-\\[--color-destructive\\]")
+    const first = document.querySelector(".text-\\[var\\(--color-destructive\\)\\]")
     first?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, 50)
 }

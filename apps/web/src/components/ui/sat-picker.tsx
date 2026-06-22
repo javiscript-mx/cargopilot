@@ -63,25 +63,25 @@ export function SatPicker({ value, onChange, search, resolve, cacheKey, label, p
 
   return (
     <div ref={ref} className="relative flex flex-col gap-1.5">
-      {label && <span className="text-sm font-medium text-[--color-foreground]">{label}</span>}
+      {label && <span className="text-sm font-medium text-[var(--color-foreground)]">{label}</span>}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-left text-sm focus:outline-none focus:ring-2 focus:ring-[--color-primary]",
-          error ? "border-[--color-destructive]" : "border-[--color-border]",
+          "flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-left text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]",
+          error ? "border-[var(--color-destructive)]" : "border-[var(--color-border)]",
         )}
       >
-        <span className={cn("min-w-0 truncate", !value && "text-[--color-muted-foreground]")}>
+        <span className={cn("min-w-0 truncate", !value && "text-[var(--color-muted-foreground)]")}>
           {value ? (selected?.label ?? value) : (placeholder ?? "Selecciona...")}
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
+        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-[--color-border] bg-white shadow-lg">
-          <div className="relative border-b border-[--color-border]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--color-muted-foreground]" />
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-[var(--color-border)] bg-white shadow-lg">
+          <div className="relative border-b border-[var(--color-border)]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
             <input
               ref={inputRef}
               type="text"
@@ -93,20 +93,20 @@ export function SatPicker({ value, onChange, search, resolve, cacheKey, label, p
           </div>
           <div className="max-h-64 overflow-y-auto">
             {debounced.trim().length < minChars ? (
-              <p className="px-3 py-3 text-xs text-[--color-muted-foreground]">Escribe al menos {minChars} caracteres…</p>
+              <p className="px-3 py-3 text-xs text-[var(--color-muted-foreground)]">Escribe al menos {minChars} caracteres…</p>
             ) : isFetching ? (
-              <p className="px-3 py-3 text-xs text-[--color-muted-foreground]">Buscando…</p>
+              <p className="px-3 py-3 text-xs text-[var(--color-muted-foreground)]">Buscando…</p>
             ) : results.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-[--color-muted-foreground]">Sin resultados.</p>
+              <p className="px-3 py-3 text-xs text-[var(--color-muted-foreground)]">Sin resultados.</p>
             ) : (
               results.map((it) => (
                 <button
                   key={it.code}
                   type="button"
                   onClick={() => pick(it.code)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[--color-muted]"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--color-muted)]"
                 >
-                  <Check className={cn("h-3.5 w-3.5 shrink-0", it.code === value ? "opacity-100 text-[--color-primary]" : "opacity-0")} />
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", it.code === value ? "opacity-100 text-[var(--color-primary)]" : "opacity-0")} />
                   <span className="min-w-0 truncate">{it.label}</span>
                 </button>
               ))
@@ -114,7 +114,7 @@ export function SatPicker({ value, onChange, search, resolve, cacheKey, label, p
           </div>
         </div>
       )}
-      {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

@@ -15,10 +15,14 @@ import { catalogRoutes } from "./routes/catalog.js"
 import { documentsRoutes } from "./routes/documents.js"
 import { vehiclesRoutes } from "./routes/vehicles.js"
 import { operatorsRoutes } from "./routes/operators.js"
+import { trailersRoutes } from "./routes/trailers.js"
+import { expensesRoutes } from "./routes/expenses.js"
 import { merchandiseRoutes } from "./routes/merchandise.js"
 import { containersRoutes } from "./routes/containers.js"
 import { satRoutes } from "./routes/sat.js"
 import { processRoutes } from "./routes/process.js"
+import { auditRoutes } from "./routes/audit.js"
+import { registerAuditHook } from "./lib/audit.js"
 
 const isDev = process.env["NODE_ENV"] === "development"
 
@@ -84,10 +88,16 @@ await app.register(catalogRoutes, { prefix: "/api" })
 await app.register(documentsRoutes, { prefix: "/api" })
 await app.register(vehiclesRoutes, { prefix: "/api" })
 await app.register(operatorsRoutes, { prefix: "/api" })
+await app.register(trailersRoutes, { prefix: "/api" })
+await app.register(expensesRoutes, { prefix: "/api" })
 await app.register(merchandiseRoutes, { prefix: "/api" })
 await app.register(containersRoutes, { prefix: "/api" })
 await app.register(satRoutes, { prefix: "/api" })
 await app.register(processRoutes, { prefix: "/api" })
+await app.register(auditRoutes, { prefix: "/api" })
+
+// Bitácora de auditoría: hook global que registra toda mutación exitosa
+registerAuditHook(app)
 
 // ─── Health check ────────────────────────────────────────────────────────────
 

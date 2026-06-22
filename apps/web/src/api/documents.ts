@@ -1,16 +1,20 @@
 import { apiClient } from "@/lib/api-client"
 
-export type DocumentEntityType = "customer" | "supplier" | "shipment" | "invoice"
+export type DocumentEntityType = "customer" | "supplier" | "shipment" | "invoice" | "expense"
 
 export interface AppDocument {
   id: string
   entityType: DocumentEntityType
   entityId: string
+  kind: string | null
+  notes: string | null
   originalName: string
   mimeType: string
   size: number
   createdAt: string
 }
+
+export interface UploadMeta { kind?: string | null; notes?: string | null }
 
 export interface StorageStatus {
   configured: boolean
@@ -25,10 +29,12 @@ export const documentsApi = {
     apiClient.get<AppDocument[]>(`/documents?entityType=${entityType}&entityId=${entityId}`),
 
   // multipart — no usa el wrapper JSON
-  upload: async (entityType: DocumentEntityType, entityId: string, file: File): Promise<AppDocument> => {
+  upload: async (entityType: DocumentEntityType, entityId: string, file: File, meta?: UploadMeta): Promise<AppDocument> => {
     const formData = new FormData()
     formData.append("entityType", entityType)
     formData.append("entityId", entityId)
+    if (meta?.kind) formData.append("kind", meta.kind)
+    if (meta?.notes) formData.append("notes", meta.notes)
     formData.append("file", file)
     const response = await fetch("/api/documents/upload", {
       method: "POST",

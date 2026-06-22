@@ -1,10 +1,14 @@
 import { useRef, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { FileText, Upload, Download, Trash2, AlertCircle } from "lucide-react"
+import { FileText, Upload, Download, Trash2, AlertCircle, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { documentsApi, type DocumentEntityType } from "@/api/documents"
+import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.xml,.doc,.docx,.xls,.xlsx"
 
@@ -50,23 +54,23 @@ export function PendingFilesPicker({ files, onChange, disabled }: PendingFilesPi
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-[--color-foreground]">Documentos (opcional)</span>
+      <span className="text-sm font-medium text-[var(--color-foreground)]">Documentos (opcional)</span>
       <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={handleSelect} />
-      <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-[--color-border] p-3">
+      <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-[var(--color-border)] p-3">
         {files.length === 0 ? (
-          <p className="text-xs text-[--color-muted-foreground]">
+          <p className="text-xs text-[var(--color-muted-foreground)]">
             Constancia fiscal, comprobantes, contratos... Se suben al guardar.
           </p>
         ) : (
           files.map((file, idx) => (
             <div key={`${file.name}-${idx}`} className="flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
+              <FileText className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
               <span className="min-w-0 flex-1 truncate">{file.name}</span>
-              <span className="text-xs text-[--color-muted-foreground]">{formatSize(file.size)}</span>
+              <span className="text-xs text-[var(--color-muted-foreground)]">{formatSize(file.size)}</span>
               <button
                 type="button"
                 onClick={() => onChange(files.filter((_, i) => i !== idx))}
-                className="rounded p-1 text-[--color-muted-foreground] hover:text-[--color-destructive]"
+                className="rounded p-1 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -84,7 +88,7 @@ export function PendingFilesPicker({ files, onChange, disabled }: PendingFilesPi
           <Upload className="h-3.5 w-3.5" /> Seleccionar archivos
         </Button>
       </div>
-      {error && <p className="text-xs text-[--color-destructive]">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }
@@ -101,8 +105,16 @@ interface DocumentsSectionProps {
 export function DocumentsSection({ entityType, entityId, readOnly = false, bare = false }: DocumentsSectionProps) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
+  // Form de subida: tipo (catálogo) + observación + archivo
+  const [showForm, setShowForm] = useState(false)
+  const [kind, setKind] = useState("")
+  const [notes, setNotes] = useState("")
+  const [file, setFile] = useState<File | null>(null)
+  const { simpleOptions: typeOptions } = useCatalog("document_type")
+  const typeLabel = (code: string | null) => (code ? typeOptions.find((o) => o.value === code)?.label ?? code : null)
 
   const { data: status } = useQuery({
     queryKey: ["documents-status"],
@@ -116,12 +128,14 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
     enabled: Boolean(entityId),
   })
 
+  function resetForm() { setShowForm(false); setKind(""); setNotes(""); setFile(null); setError(null) }
+
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => documentsApi.upload(entityType, entityId, file),
+    mutationFn: (f: File) => documentsApi.upload(entityType, entityId, f, { kind: kind || null, notes: notes || null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", entityType, entityId] })
-      setError(null)
-      toast.success("Documento subido")
+      toast.success("Evidencia subida")
+      resetForm()
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -136,15 +150,18 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
   })
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 15 * 1024 * 1024) {
-        setError("Archivo demasiado grande (máx. 15 MB)")
-      } else {
-        uploadMutation.mutate(file)
-      }
+    const selected = e.target.files?.[0]
+    if (selected) {
+      if (selected.size > 15 * 1024 * 1024) setError("Archivo demasiado grande (máx. 15 MB)")
+      else { setError(null); setFile(selected) }
     }
-    e.target.value = "" // permite re-subir el mismo archivo
+    e.target.value = "" // permite re-elegir el mismo archivo
+  }
+
+  function submitUpload() {
+    if (!kind) { setError("Selecciona el tipo de evidencia"); return }
+    if (!file) { setError("Selecciona un archivo"); return }
+    uploadMutation.mutate(file)
   }
 
   async function handleDownload(id: string) {
@@ -158,58 +175,74 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
 
   const storageReady = status?.configured ?? false
 
-  const action = !readOnly && storageReady && (
-    <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={ACCEPT}
-        className="hidden"
-        onChange={handleFileChange}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-1.5"
-        loading={uploadMutation.isPending}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <Upload className="h-3.5 w-3.5" /> Subir archivo
-      </Button>
-    </>
+  const action = !readOnly && storageReady && !showForm && (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="flex items-center gap-1.5"
+      onClick={() => { setShowForm(true); setError(null) }}
+    >
+      <Upload className="h-3.5 w-3.5" /> Subir evidencia
+    </Button>
+  )
+
+  const uploadForm = !readOnly && storageReady && showForm && (
+    <div className="mb-4 flex flex-col gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Nueva evidencia</span>
+        <button type="button" onClick={resetForm} className="rounded p-1 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"><X className="h-4 w-4" /></button>
+      </div>
+      <Select id="doc-kind" label="Tipo de evidencia" placeholder="Selecciona el tipo..." options={typeOptions} value={kind} onChange={(e) => setKind(e.target.value)} />
+      <Input id="doc-notes" label="Observación (opcional)" placeholder="Referencia, detalle de la evidencia..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+      <input ref={fileInputRef} type="file" accept={ACCEPT} className="hidden" onChange={handleFileChange} />
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="h-3.5 w-3.5" /> {file ? "Cambiar archivo" : "Elegir archivo"}
+        </Button>
+        {file && <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-muted-foreground)]">{file.name} · {formatSize(file.size)}</span>}
+      </div>
+      {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
+        <Button type="button" size="sm" loading={uploadMutation.isPending} onClick={submitUpload}>Subir</Button>
+      </div>
+    </div>
   )
 
   const body = (
     <>
+      {uploadForm}
       {!storageReady ? (
           <div className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
             <AlertCircle className="h-4 w-4 shrink-0" />
             Almacenamiento no disponible.
           </div>
         ) : isLoading ? (
-          <p className="py-3 text-center text-sm text-[--color-muted-foreground]">Cargando...</p>
+          <p className="py-3 text-center text-sm text-[var(--color-muted-foreground)]">Cargando...</p>
         ) : documents.length === 0 ? (
-          <p className="py-3 text-center text-sm text-[--color-muted-foreground]">
+          <p className="py-3 text-center text-sm text-[var(--color-muted-foreground)]">
             Sin documentos. {!readOnly && "Sube constancia fiscal, contratos, comprobantes..."}
           </p>
         ) : (
-          <div className="flex flex-col divide-y divide-[--color-border]">
+          <div className="flex flex-col divide-y divide-[var(--color-border)]">
             {documents.map((doc) => (
               <div key={doc.id} className="flex items-center gap-3 py-2.5">
-                <FileText className="h-4 w-4 shrink-0 text-[--color-muted-foreground]" />
+                <FileText className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{doc.originalName}</p>
-                  <p className="text-xs text-[--color-muted-foreground]">
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    {typeLabel(doc.kind) && <span className="font-medium text-[var(--color-foreground)]">{typeLabel(doc.kind)} · </span>}
                     {formatSize(doc.size)} · {new Date(doc.createdAt).toLocaleDateString("es-MX")}
                   </p>
+                  {doc.notes && <p className="truncate text-xs text-[var(--color-muted-foreground)]">{doc.notes}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     title="Descargar"
                     onClick={() => handleDownload(doc.id)}
-                    className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-[--color-muted] hover:text-[--color-foreground]"
+                    className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                   >
                     <Download className="h-4 w-4" />
                   </button>
@@ -217,10 +250,10 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
                     <button
                       type="button"
                       title="Eliminar"
-                      onClick={() => {
-                        if (confirm(`¿Eliminar "${doc.originalName}"?`)) deleteMutation.mutate(doc.id)
+                      onClick={async () => {
+                        if (await confirm(`¿Eliminar "${doc.originalName}"?`)) deleteMutation.mutate(doc.id)
                       }}
-                      className="rounded p-1.5 text-[--color-muted-foreground] transition-colors hover:bg-red-50 hover:text-[--color-destructive]"
+                      className="rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-[var(--color-destructive)]"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -230,7 +263,7 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
             ))}
           </div>
         )}
-      {error && <p className="mt-2 text-xs text-[--color-destructive]">{error}</p>}
+      {!showForm && error && <p className="mt-2 text-xs text-[var(--color-destructive)]">{error}</p>}
     </>
   )
 

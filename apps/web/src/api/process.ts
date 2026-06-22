@@ -74,11 +74,23 @@ export interface ShipmentProcess {
   legs: ProcessLeg[]
 }
 
+export interface CartaPortePreview {
+  distanciaKm: number | null
+  origen: { rfc: string | null; nombre: string | null; cp: string | null; estado: string | null; domicilio: string | null; fecha: string | null }
+  destino: { rfc: string | null; nombre: string | null; cp: string | null; estado: string | null; domicilio: string | null; fecha: string | null }
+  autotransporte: { placa: string; config: string | null; anio: number | null; permSct: string | null; numPermiso: string | null; aseguradora: string | null; poliza: string | null } | null
+  remolques: string[]
+  operador: { rfc: string | null; nombre: string; licencia: string | null } | null
+  mercancias: { clave: string | null; descripcion: string; cantidad: number; unidad: string | null; pesoKg: number | null }[]
+  pesoTotalKg: number
+}
+
 export interface CartaPorteReadiness {
   ready: boolean
   groups: { group: string; items: { label: string; ok: boolean }[] }[]
   defaultTipo: "ingreso" | "traslado"
   invoice: { id: string; series: string; folio: string; status: string; total: string } | null
+  preview: CartaPortePreview
 }
 
 export interface WorkflowTemplateOption {

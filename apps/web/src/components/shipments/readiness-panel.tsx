@@ -68,11 +68,11 @@ export function ReadinessBar({ shipmentId, customerId, onGoTo }: { shipmentId: s
               <p className="text-sm font-semibold text-green-700">Expediente completo — listo para cerrar</p>
             ) : (
               <p className="truncate text-sm">
-                <span className="text-[--color-muted-foreground]">Siguiente: </span>
+                <span className="text-[var(--color-muted-foreground)]">Siguiente: </span>
                 <span className="font-semibold">{data.nextAction?.label ?? "—"}</span>
               </p>
             )}
-            {!ready && data.nextAction && <p className="truncate text-xs text-[--color-muted-foreground]">{data.nextAction.hint}</p>}
+            {!ready && data.nextAction && <p className="truncate text-xs text-[var(--color-muted-foreground)]">{data.nextAction.hint}</p>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -86,7 +86,7 @@ export function ReadinessBar({ shipmentId, customerId, onGoTo }: { shipmentId: s
             </Button>
           ))}
           {!ready && (
-            <button onClick={() => setOpen(true)} className="text-xs font-medium text-[--color-primary] hover:underline">
+            <button onClick={() => setOpen(true)} className="text-xs font-medium text-[var(--color-primary)] hover:underline">
               Ver {missingCount} faltante{missingCount === 1 ? "" : "s"}
             </button>
           )}
@@ -96,7 +96,7 @@ export function ReadinessBar({ shipmentId, customerId, onGoTo }: { shipmentId: s
       {/* Semáforos compactos */}
       <div className="mt-2.5 flex flex-wrap gap-1.5">
         {chips.map((c) => (
-          <span key={c.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${c.ok ? "bg-green-100 text-green-800" : "bg-[--color-muted] text-[--color-muted-foreground]"}`}>
+          <span key={c.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${c.ok ? "bg-green-100 text-green-800" : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"}`}>
             {c.ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />} {c.label}
           </span>
         ))}
@@ -109,17 +109,17 @@ export function ReadinessBar({ shipmentId, customerId, onGoTo }: { shipmentId: s
         <div className="flex flex-col gap-4">
           {data.nextAction && (
             <div className="rounded-md border border-amber-300 bg-amber-50/50 p-3">
-              <p className="text-xs font-medium text-[--color-muted-foreground]">Siguiente acción</p>
+              <p className="text-xs font-medium text-[var(--color-muted-foreground)]">Siguiente acción</p>
               <p className="mt-0.5 text-sm font-semibold">{data.nextAction.label}</p>
-              <p className="text-xs text-[--color-muted-foreground]">{data.nextAction.hint}</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{data.nextAction.hint}</p>
             </div>
           )}
           {failing.map((b) => (
             <div key={b.key}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[--color-muted-foreground]">{b.title}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{b.title}</p>
               <div className="mt-0.5 flex flex-col gap-0.5">
                 {b.checks.filter((c) => !c.ok).map((c) => (
-                  <span key={c.label} className="flex items-center gap-1.5 text-sm text-[--color-destructive]">
+                  <span key={c.label} className="flex items-center gap-1.5 text-sm text-[var(--color-destructive)]">
                     <X className="h-3.5 w-3.5 shrink-0" /> {c.label}
                   </span>
                 ))}

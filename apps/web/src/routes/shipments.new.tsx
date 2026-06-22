@@ -87,11 +87,11 @@ function NewShipmentPage() {
   return (
     <AppLayout>
       <div className="mb-6">
-        <Link to="/shipments" className="mb-4 flex items-center gap-2 text-sm text-[--color-muted-foreground] hover:text-[--color-foreground]">
+        <Link to="/shipments" className="mb-4 flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
           <ArrowLeft className="h-4 w-4" /> Expedientes
         </Link>
         <h1 className="text-2xl font-bold">Nuevo expediente</h1>
-        <p className="text-sm text-[--color-muted-foreground]">
+        <p className="text-sm text-[var(--color-muted-foreground)]">
           Para abrir solo necesitas cliente y tipo de operación. La ruta y el transporte se capturan por tramo en el proceso.
         </p>
       </div>
@@ -130,7 +130,7 @@ function NewShipmentPage() {
               <CardTitle>Servicio</CardTitle>
               <Badge variant="outline">Opcional</Badge>
             </div>
-            <p className="text-sm text-[--color-muted-foreground]">
+            <p className="text-sm text-[var(--color-muted-foreground)]">
               Descripción general. Tramos, mercancías y transporte se capturan después en el expediente.
             </p>
           </CardHeader>

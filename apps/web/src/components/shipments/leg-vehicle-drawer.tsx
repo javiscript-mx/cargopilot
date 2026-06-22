@@ -9,6 +9,7 @@ import { useCatalog } from "@/hooks/use-catalog"
 import { suppliersApi } from "@/api/suppliers"
 import { vehiclesApi } from "@/api/vehicles"
 import { operatorsApi } from "@/api/operators"
+import { trailersApi } from "@/api/trailers"
 import { processApi, type LegVehicleAssignment, type LegVehiclePatch } from "@/api/process"
 import { collectErrors, scrollToFirstError } from "@/lib/validators"
 
@@ -57,12 +58,32 @@ export function LegVehicleDrawer({
     queryFn: () => operatorsApi.list({ supplierId: form.carrierSupplierId, active: true }),
     enabled: Boolean(form.carrierSupplierId),
   })
+  const { data: allTrailers = [] } = useQuery({
+    queryKey: ["trailers", form.carrierSupplierId],
+    queryFn: () => trailersApi.list({ supplierId: form.carrierSupplierId, active: true }),
+    enabled: Boolean(form.carrierSupplierId),
+  })
   const vehicles = allVehicles.filter((v) => v.status === "authorized")
   const operators = allOperators.filter((o) => o.status === "authorized")
+  const trailers = allTrailers.filter((t) => t.status === "authorized")
   const hiddenCount = (allVehicles.length - vehicles.length) + (allOperators.length - operators.length)
 
+  // Remolques se eligen del catálogo del transportista; persistimos placa + subtipo
+  // (denormalizado para el nodo Remolques de Carta Porte). El value del Select es el id.
+  const subTypeName = (code: string | null | undefined) =>
+    code ? (trailerTypeOptions.find((o) => o.value === code)?.label ?? code) : ""
+  const trailerLabel = (t: { plate: string; subType: string | null }) =>
+    t.subType ? `${t.plate} · ${subTypeName(t.subType)}` : t.plate
+  const trailerIdFor = (plate: string) => trailers.find((t) => t.plate === plate)?.id ?? ""
+  const onTrailerChange = (slot: 1 | 2) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const t = trailers.find((x) => x.id === e.target.value)
+    setForm((f) => slot === 1
+      ? { ...f, trailer1Plate: t?.plate ?? "", trailer1Type: t?.subType ?? "" }
+      : { ...f, trailer2Plate: t?.plate ?? "", trailer2Type: t?.subType ?? "" })
+  }
+
   const onCarrierChange = (e: React.ChangeEvent<HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, carrierSupplierId: e.target.value, vehicleId: "", operatorId: "" }))
+    setForm((f) => ({ ...f, carrierSupplierId: e.target.value, vehicleId: "", operatorId: "", trailer1Plate: "", trailer1Type: "", trailer2Plate: "", trailer2Type: "" }))
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -86,10 +107,6 @@ export function LegVehicleDrawer({
     },
     onError: (err: Error) => toast.error("No se pudo guardar la unidad", err.message),
   })
-
-  const trailerOpts = trailerTypeOptions.length
-    ? trailerTypeOptions
-    : [{ value: "CTR004", label: "CTR004 - Caja seca" }, { value: "CTR031", label: "CTR031 - Plataforma" }]
 
   return (
     <Drawer
@@ -120,6 +137,10 @@ export function LegVehicleDrawer({
           scrollToFirstError()
           return
         }
+        if (form.trailer1Plate && form.trailer1Plate === form.trailer2Plate) {
+          toast.error("Remolque duplicado", "No puedes asignar el mismo remolque dos veces.")
+          return
+        }
         setErrors({})
         saveMutation.mutate()
       }} className="flex flex-col gap-4">
@@ -144,19 +165,35 @@ export function LegVehicleDrawer({
           />
         </div>
         {form.carrierSupplierId && hiddenCount > 0 && (
-          <p className="-mt-2 text-xs text-[--color-muted-foreground]">
+          <p className="-mt-2 text-xs text-[var(--color-muted-foreground)]">
             {hiddenCount} unidad(es)/operador(es) ocultos por no estar autorizados. Autorízalos en el proveedor.
           </p>
         )}
 
         <section className="flex flex-col gap-3">
           <h4 className="text-sm font-semibold">Remolques (para configuración full / doble)</h4>
+          <p className="-mt-1 text-xs text-[var(--color-muted-foreground)]">
+            Se eligen del catálogo de remolques del transportista (Proveedor → Remolques).
+          </p>
           <div className="grid grid-cols-2 gap-3">
-            <Input id="trailer1Plate" label="Remolque 1 · placa" value={form.trailer1Plate} onChange={set("trailer1Plate")} maxLength={10} />
-            <Select id="trailer1Type" label="Remolque 1 · subtipo" placeholder="—" options={trailerOpts} value={form.trailer1Type} onChange={set("trailer1Type")} />
-            <Input id="trailer2Plate" label="Remolque 2 · placa" value={form.trailer2Plate} onChange={set("trailer2Plate")} maxLength={10} />
-            <Select id="trailer2Type" label="Remolque 2 · subtipo" placeholder="—" options={trailerOpts} value={form.trailer2Type} onChange={set("trailer2Type")} />
+            <Select
+              id="trailer1" label="Remolque 1"
+              placeholder={form.carrierSupplierId ? "Sin remolque" : "Elige transportista"}
+              options={trailers.filter((t) => t.id !== trailerIdFor(form.trailer2Plate)).map((t) => ({ value: t.id, label: trailerLabel(t) }))}
+              value={trailerIdFor(form.trailer1Plate)} onChange={onTrailerChange(1)}
+            />
+            <Select
+              id="trailer2" label="Remolque 2"
+              placeholder={form.carrierSupplierId ? "Sin remolque" : "Elige transportista"}
+              options={trailers.filter((t) => t.id !== trailerIdFor(form.trailer1Plate)).map((t) => ({ value: t.id, label: trailerLabel(t) }))}
+              value={trailerIdFor(form.trailer2Plate)} onChange={onTrailerChange(2)}
+            />
           </div>
+          {form.carrierSupplierId && trailers.length === 0 && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              Este transportista no tiene remolques autorizados. Agrégalos en el proveedor (pestaña Remolques).
+            </p>
+          )}
         </section>
 
         <Input id="notes" label="Notas (opcional)" value={form.notes} onChange={set("notes")} />

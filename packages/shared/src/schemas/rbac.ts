@@ -27,6 +27,10 @@ export const PERMISSIONS = [
   "invoices.create",
   "invoices.stamp",
   "invoices.cancel",
+  // Compras / gastos (módulo de Finanzas)
+  "purchases.read",
+  "purchases.write",
+  "purchases.authorize",
   // Proveedores (incluye unidades y operadores de autotransporte)
   "suppliers.read",
   "suppliers.write",
@@ -36,6 +40,8 @@ export const PERMISSIONS = [
   // Configuración del sistema
   "catalog.manage",
   "settings.manage",
+  // Auditoría (bitácora de acciones) — solo admin
+  "audit.read",
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -61,12 +67,16 @@ export const PERMISSION_META: Record<Permission, PermissionMeta> = {
   "invoices.create": { module: "Facturación", label: "Crear borradores", description: "Crear borradores de factura (sin timbrar)" },
   "invoices.stamp": { module: "Facturación", label: "Timbrar CFDI", description: "Timbrar facturas ante el SAT vía Facturama" },
   "invoices.cancel": { module: "Facturación", label: "Cancelar CFDI", description: "Solicitar la cancelación de un CFDI timbrado" },
+  "purchases.read": { module: "Compras", label: "Ver compras y gastos", description: "Consultar gastos y cuentas por pagar de los expedientes" },
+  "purchases.write": { module: "Compras", label: "Registrar compras y gastos", description: "Registrar y editar gastos/compras de expedientes" },
+  "purchases.authorize": { module: "Compras", label: "Autorizar y pagar", description: "Autorizar gastos para pago y marcarlos como pagados" },
   "suppliers.read": { module: "Proveedores", label: "Ver proveedores", description: "Consultar proveedores, unidades y operadores" },
   "suppliers.write": { module: "Proveedores", label: "Editar proveedores", description: "Crear y modificar proveedores, unidades y operadores" },
   "suppliers.delete": { module: "Proveedores", label: "Eliminar proveedores", description: "Dar de baja proveedores del catálogo" },
   "documents.write": { module: "Documentos", label: "Gestionar documentos", description: "Subir y eliminar documentos adjuntos" },
   "catalog.manage": { module: "Configuración", label: "Administrar catálogos", description: "Editar catálogos del sistema (tipos, claves SAT, etc.)" },
   "settings.manage": { module: "Configuración", label: "Administrar configuración", description: "Editar la configuración general y fiscal del sistema" },
+  "audit.read": { module: "Auditoría", label: "Ver bitácora de auditoría", description: "Consultar el registro de acciones de los usuarios" },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,7 +97,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   viewer: "Acceso de solo lectura a la operación.",
 }
 
-const READ_ONLY: Permission[] = ["customers.read", "shipments.read", "invoices.read", "suppliers.read"]
+const READ_ONLY: Permission[] = ["customers.read", "shipments.read", "invoices.read", "suppliers.read", "purchases.read"]
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // El admin tiene todos los privilegios
@@ -97,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "customers.read", "customers.write",
     "shipments.read", "shipments.write", "shipments.changeStatus", "shipments.delete", "shipments.advanceTask",
     "invoices.read", "invoices.create",
+    "purchases.read", "purchases.write",
     "suppliers.read", "suppliers.write",
     "documents.write",
   ],
@@ -106,6 +117,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "customers.read", "customers.write",
     "shipments.read", "shipments.advanceTask",
     "invoices.read", "invoices.create", "invoices.stamp", "invoices.cancel",
+    "purchases.read", "purchases.write", "purchases.authorize",
     "suppliers.read",
     "documents.write",
   ],

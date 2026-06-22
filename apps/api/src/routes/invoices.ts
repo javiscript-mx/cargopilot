@@ -3,9 +3,12 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
 import { requireAuth, requirePermission } from "../middleware/require-auth.js"
-import { createCFDI, cancelCFDI, getCFDIPdf, getCFDIXml } from "../lib/facturama.js"
+import { createCFDI, cancelCFDI, getCFDIPdf, getCFDIXml, parseCfdiIdentifiers } from "../lib/facturama.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { parsePaging, setTotal, searchOr } from "../lib/pagination.js"
+import { computeTaxes, personaFromRfc, isAutotransporteCarga, round2, IVA_RATE, IVA_RETENTION_RATE } from "../lib/taxes.js"
+import { syncShipmentAutoTasks, syncLegAutoTasks } from "../lib/workflow.js"
+import { loadCartaPorteContext, cartaPorteReadiness, buildCartaPorteComplemento } from "../lib/carta-porte.js"
 
 const InvoiceItemSchema = z.object({
   description: z.string().min(1),
@@ -16,6 +19,9 @@ const InvoiceItemSchema = z.object({
 })
 type InvoiceItem = z.infer<typeof InvoiceItemSchema>
 
+// Importe (valor) de un concepto
+const itemAmount = (i: InvoiceItem) => round2(i.quantity * i.unitPrice)
+
 const CreateInvoiceSchema = z.object({
   customerId: z.string(),
   shipmentId: z.string().optional(),
@@ -25,9 +31,6 @@ const CreateInvoiceSchema = z.object({
   paymentMethod: z.string().default("PUE"),
   series: z.string().default("A"),
 })
-
-// Redondeo a 2 decimales (CFDI exige importes con 2 decimales que cuadren)
-const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
 // Lee un setting string con fallback
 async function getSetting(key: string, fallback: string): Promise<string> {
@@ -83,12 +86,12 @@ export async function invoicesRoutes(app: FastifyInstance) {
       const customer = await prisma.customer.findUnique({ where: { id: body.data.customerId } })
       if (!customer) return reply.status(404).send({ error: "Cliente no encontrado" })
 
-      const subtotal = round2(body.data.items.reduce(
-        (acc, item) => acc + round2(item.quantity * item.unitPrice),
-        0,
-      ))
-      const tax = round2(subtotal * 0.16)
-      const total = round2(subtotal + tax)
+      // IVA 16% + retención IVA 4% (autotransporte a receptor PM). Ver lib/taxes.
+      const receptor = personaFromRfc(customer.rfc)
+      const { subtotal, ivaTraslado: tax, ivaRetencion: retention, total } = computeTaxes(
+        body.data.items.map((item) => ({ amount: itemAmount(item), productCode: item.productCode })),
+        receptor,
+      )
 
       // Folio por serie basado en el máximo (no count): sin colisión tras borrados.
       const series = body.data.series
@@ -111,14 +114,29 @@ export async function invoicesRoutes(app: FastifyInstance) {
             items: body.data.items as unknown as Prisma.InputJsonValue,
             subtotal,
             tax,
+            retention,
             total,
           },
         }),
       )
 
+      if (invoice.shipmentId) await syncShipmentAutoTasks(invoice.shipmentId)
       return reply.status(201).send(invoice)
     },
   )
+
+  // Borrar una factura — SOLO borradores (las timbradas se cancelan, no se borran)
+  app.delete("/invoices/:id", { preHandler: requirePermission("invoices.create") }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, status: true, shipmentId: true } })
+    if (!invoice) return reply.status(404).send({ error: "Factura no encontrada" })
+    if (invoice.status !== "draft") {
+      return reply.status(409).send({ error: "Solo se pueden borrar facturas en borrador. Las timbradas se cancelan." })
+    }
+    await prisma.invoice.delete({ where: { id } })
+    if (invoice.shipmentId) await syncShipmentAutoTasks(invoice.shipmentId)
+    return reply.status(204).send()
+  })
 
   // Timbrar (stamping) con Facturama
   app.post(
@@ -126,6 +144,11 @@ export async function invoicesRoutes(app: FastifyInstance) {
     { preHandler: requirePermission("invoices.stamp") },
     async (request, reply) => {
       const { id } = request.params as { id: string }
+      // Opcional: adjuntar el complemento Carta Porte del transporte de una unidad (tramo).
+      // Coexiste con el timbrado de CP por unidad; aquí la MISMA factura de servicio lo lleva.
+      const stampBody = z.object({ cartaPorte: z.object({ legVehicleId: z.string() }).optional() }).safeParse(request.body ?? {})
+      if (!stampBody.success) return reply.status(400).send({ error: stampBody.error.flatten() })
+      const ccpUnitId = stampBody.data.cartaPorte?.legVehicleId
 
       const invoice = await prisma.invoice.findUnique({
         where: { id },
@@ -135,6 +158,26 @@ export async function invoicesRoutes(app: FastifyInstance) {
       if (!invoice) return reply.status(404).send({ error: "Factura no encontrada" })
       if (invoice.status !== "draft") {
         return reply.status(409).send({ error: "Solo se pueden timbrar facturas en borrador" })
+      }
+
+      // ── Complemento Carta Porte (si se pidió): validar ANTES de armar el CFDI ──
+      let complemento: ReturnType<typeof buildCartaPorteComplemento> | null = null
+      let ccpCtx: Awaited<ReturnType<typeof loadCartaPorteContext>> = null
+      if (ccpUnitId) {
+        ccpCtx = await loadCartaPorteContext(ccpUnitId)
+        if (!ccpCtx) return reply.status(404).send({ error: "Unidad de transporte no encontrada para la Carta Porte" })
+        if (ccpCtx.leg.shipmentId !== invoice.shipmentId) {
+          return reply.status(422).send({ error: "La unidad de Carta Porte no pertenece a este expediente." })
+        }
+        if (ccpCtx.unit.cartaPorteInvoiceId) {
+          return reply.status(409).send({ error: "Esa unidad ya tiene una Carta Porte timbrada (no se puede duplicar el complemento)." })
+        }
+        const readiness = cartaPorteReadiness(ccpCtx)
+        if (!readiness.ready) {
+          const missing = readiness.groups.flatMap((g) => g.items.filter((i) => !i.ok).map((i) => `${g.group}: ${i.label}`))
+          return reply.status(422).send({ error: "Faltan datos para la Carta Porte", missing })
+        }
+        complemento = buildCartaPorteComplemento(ccpCtx)
       }
 
       // Conceptos: SIEMPRE desde la BD (no del request) — son los del borrador
@@ -166,6 +209,8 @@ export async function invoicesRoutes(app: FastifyInstance) {
 
       // Receptor extranjero: agrega país (c_Pais) y tax id si el cliente no es MX
       const isForeign = (customer.taxCountry ?? "MX") !== "MX"
+      // El receptor PM retiene 4% de IVA sobre los conceptos de autotransporte terrestre
+      const receptorPersona = personaFromRfc(customer.rfc)
 
       // Serie para Facturama: debe estar registrada en su sucursal. Si no se configura
       // en Settings, se omite y Facturama asigna folio (evita "Serie debe existir en la sucursal").
@@ -189,7 +234,10 @@ export async function invoicesRoutes(app: FastifyInstance) {
         },
         Items: items.map((item) => {
           const subtotal = round2(item.quantity * item.unitPrice)
-          const tax = round2(subtotal * 0.16)
+          const tax = round2(subtotal * IVA_RATE)
+          // Retención de IVA 4% solo en autotransporte terrestre y si el receptor es PM
+          const retains = receptorPersona === "moral" && isAutotransporteCarga(item.productCode)
+          const retention = retains ? round2(subtotal * IVA_RETENTION_RATE) : 0
           return {
             Quantity: item.quantity,
             ProductCode: item.productCode,
@@ -200,17 +248,13 @@ export async function invoicesRoutes(app: FastifyInstance) {
             Subtotal: subtotal,
             TaxObject: "02",
             Taxes: [
-              {
-                Total: tax,
-                Name: "IVA",
-                Base: subtotal,
-                Rate: 0.16,
-                IsRetention: false,
-              },
+              { Total: tax, Name: "IVA", Base: subtotal, Rate: IVA_RATE, IsRetention: false },
+              ...(retains ? [{ Total: retention, Name: "IVA", Base: subtotal, Rate: IVA_RETENTION_RATE, IsRetention: true }] : []),
             ],
-            Total: round2(subtotal + tax),
+            Total: round2(subtotal + tax - retention),
           }
         }),
+        ...(complemento ? { Complemento: complemento } : {}),
       }
 
       let result: { Id: string }
@@ -228,16 +272,33 @@ export async function invoicesRoutes(app: FastifyInstance) {
           status: "stamped",
           facturamaid: result.Id,
           stampedAt: new Date(),
+          ...(complemento ? { kind: "invoice_cp" } : {}),
         },
       })
 
-      // Intento best-effort de cachear el XML; si falla, no pasa nada:
-      // el endpoint GET /invoices/:id/xml lo vuelve a pedir a Facturama on-demand.
+      // CCP en la factura: enlaza la unidad para no duplicar el complemento y marca su tarea
+      if (ccpUnitId && ccpCtx) {
+        await prisma.legVehicle.update({ where: { id: ccpUnitId }, data: { cartaPorteInvoiceId: updated.id } })
+        await syncLegAutoTasks(ccpCtx.leg.id)
+      }
+
+      if (updated.shipmentId) await syncShipmentAutoTasks(updated.shipmentId) // facturar
+
+      // Intento best-effort de cachear el XML y de capturar la identidad fiscal (UUID,
+      // serie y folio REALES estampados por el PAC). Si falla, no pasa nada: el endpoint
+      // GET /invoices/:id/xml lo vuelve a pedir a Facturama y rellena estos campos on-demand.
       try {
         const xmlBase64 = await getCFDIXml(result.Id)
+        const xml = Buffer.from(xmlBase64, "base64").toString("utf-8")
+        const fiscal = parseCfdiIdentifiers(xml)
         await prisma.invoice.update({
           where: { id },
-          data: { xmlContent: Buffer.from(xmlBase64, "base64").toString("utf-8") },
+          data: {
+            xmlContent: xml,
+            ...(fiscal.uuid ? { uuid: fiscal.uuid } : {}),
+            ...(fiscal.serie ? { satSerie: fiscal.serie } : {}),
+            ...(fiscal.folio ? { satFolio: fiscal.folio } : {}),
+          },
         })
       } catch (err) {
         request.log.warn(err, "No se pudo cachear el XML al timbrar; se servirá on-demand")
@@ -280,10 +341,32 @@ export async function invoicesRoutes(app: FastifyInstance) {
         try {
           const xmlBase64 = await getCFDIXml(invoice.facturamaid)
           xml = Buffer.from(xmlBase64, "base64").toString("utf-8")
-          await prisma.invoice.update({ where: { id }, data: { xmlContent: xml } })
+          const fiscal = parseCfdiIdentifiers(xml)
+          await prisma.invoice.update({
+            where: { id },
+            data: {
+              xmlContent: xml,
+              ...(fiscal.uuid ? { uuid: fiscal.uuid } : {}),
+              ...(fiscal.serie ? { satSerie: fiscal.serie } : {}),
+              ...(fiscal.folio ? { satFolio: fiscal.folio } : {}),
+            },
+          })
         } catch (err) {
           request.log.error(err, "Error obteniendo XML de Facturama")
           return reply.status(502).send({ error: "No se pudo obtener el XML" })
+        }
+      } else if (!invoice.uuid) {
+        // XML ya cacheado pero sin identidad fiscal (timbrado antes de capturar UUID): rellena.
+        const fiscal = parseCfdiIdentifiers(xml)
+        if (fiscal.uuid) {
+          await prisma.invoice.update({
+            where: { id },
+            data: {
+              uuid: fiscal.uuid,
+              ...(fiscal.serie ? { satSerie: fiscal.serie } : {}),
+              ...(fiscal.folio ? { satFolio: fiscal.folio } : {}),
+            },
+          })
         }
       }
       reply.header("Content-Type", "application/xml")

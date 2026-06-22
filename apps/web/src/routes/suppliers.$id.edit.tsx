@@ -20,7 +20,7 @@ function EditSupplierPage() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="flex h-40 items-center justify-center text-[--color-muted-foreground]">
+        <div className="flex h-40 items-center justify-center text-[var(--color-muted-foreground)]">
           Cargando...
         </div>
       </AppLayout>

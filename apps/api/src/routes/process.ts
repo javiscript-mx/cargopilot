@@ -3,11 +3,12 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "../db/client.js"
 import { requireAuth, requirePermission } from "../middleware/require-auth.js"
-import { instantiateWorkflow, addLeg, syncLegScopeTasks } from "../lib/workflow.js"
-import { cartaPorteReadiness, buildCartaPorteComplemento, type CartaPorteContext } from "../lib/carta-porte.js"
-import { createCFDI, getCFDIXml } from "../lib/facturama.js"
+import { instantiateWorkflow, addLeg, syncLegScopeTasks, syncLegAutoTasks, syncShipmentAutoTasks, AUTO_LEG_TASK_CODES, AUTO_SHIPMENT_TASK_CODES } from "../lib/workflow.js"
+import { cartaPorteReadiness, buildCartaPorteComplemento, loadCartaPorteContext } from "../lib/carta-porte.js"
+import { createCFDI, getCFDIXml, parseCfdiIdentifiers } from "../lib/facturama.js"
 import { getShipmentReadiness } from "../lib/shipment-readiness.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
+import { personaFromRfc, isAutotransporteCarga, IVA_RATE, IVA_RETENTION_RATE } from "../lib/taxes.js"
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 async function getSetting(key: string, fallback: string): Promise<string> {
@@ -29,7 +30,8 @@ async function shipmentTaskBlocker(code: string, shipmentId: string): Promise<st
     if (quote?.status !== "accepted") return "El cliente debe aceptar la cotización antes de confirmar el servicio."
   }
   if (code === "facturar") {
-    const stamped = await prisma.invoice.count({ where: { shipmentId, kind: "service", status: "stamped" } })
+    // "invoice_cp" = factura de servicio con complemento Carta Porte; también cuenta
+    const stamped = await prisma.invoice.count({ where: { shipmentId, kind: { in: ["service", "invoice_cp"] }, status: "stamped" } })
     if (stamped === 0) return "Genera y timbra la factura del servicio antes de cerrar este paso."
   }
   if (code === "cerrar") {
@@ -75,19 +77,6 @@ async function validateUnitAssignment(carrierSupplierId: string, vehicleId: stri
 }
 
 // Carga el contexto Carta Porte de una unidad (vehículo, operador, mercancía y su tramo)
-async function loadCartaPorteContext(unitId: string): Promise<CartaPorteContext | null> {
-  const unit = await prisma.legVehicle.findUnique({ where: { id: unitId } })
-  if (!unit) return null
-  const leg = await prisma.shipmentLeg.findUnique({ where: { id: unit.legId } })
-  if (!leg) return null
-  const [vehicle, operator, merchandise] = await Promise.all([
-    unit.vehicleId ? prisma.vehicle.findUnique({ where: { id: unit.vehicleId } }) : Promise.resolve(null),
-    unit.operatorId ? prisma.operator.findUnique({ where: { id: unit.operatorId } }) : Promise.resolve(null),
-    prisma.merchandise.findMany({ where: { legVehicleId: unitId } }),
-  ])
-  return { leg, unit, vehicle, operator, merchandise }
-}
-
 // ─── Proceso / workflow del expediente (fases, tareas y tramos) ──────────────
 
 const TaskUpdateSchema = z.object({
@@ -259,6 +248,7 @@ export async function processRoutes(app: FastifyInstance) {
     if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
 
     const leg = await addLeg(id, { scope: body.data.scope, ...(body.data.legTemplateCode ? { legTemplateCode: body.data.legTemplateCode } : {}) })
+    await syncShipmentAutoTasks(id) // planear_tramos
     return reply.status(201).send(leg)
   })
 
@@ -292,14 +282,29 @@ export async function processRoutes(app: FastifyInstance) {
       },
       include: { tasks: { orderBy: { order: "asc" } }, vehicles: { orderBy: { order: "asc" } } },
     })
-    return reply.send(leg)
+    // Auto-marca las tareas derivadas de la ruta (ubicaciones, etc.)
+    await syncLegAutoTasks(legId)
+    const refreshed = await prisma.shipmentLeg.findUnique({ where: { id: legId }, include: { tasks: { orderBy: { order: "asc" } }, vehicles: { orderBy: { order: "asc" } } } })
+    return reply.send(refreshed ?? leg)
   })
 
   app.delete("/legs/:legId", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { legId } = request.params as { legId: string }
-    const existing = await prisma.shipmentLeg.findUnique({ where: { id: legId }, select: { id: true } })
+    const existing = await prisma.shipmentLeg.findUnique({
+      where: { id: legId },
+      select: { id: true, shipmentId: true, vehicles: { select: { cartaPorteInvoiceId: true } } },
+    })
     if (!existing) return reply.status(404).send({ error: "Tramo no encontrado" })
+    // CANDADO: borrar un tramo con Carta Porte timbrada orfanaría el CFDI fiscal.
+    const cpIds = existing.vehicles.map((v) => v.cartaPorteInvoiceId).filter((x): x is string => Boolean(x))
+    if (cpIds.length) {
+      const active = await prisma.invoice.count({ where: { id: { in: cpIds }, status: { not: "cancelled" } } })
+      if (active > 0) {
+        return reply.status(409).send({ error: "El tramo tiene unidades con Carta Porte timbrada. Cancela esos CFDI antes de eliminar el tramo." })
+      }
+    }
     await prisma.shipmentLeg.delete({ where: { id: legId } })
+    await syncShipmentAutoTasks(existing.shipmentId) // planear_tramos puede desmarcarse
     return reply.status(204).send()
   })
 
@@ -337,6 +342,7 @@ export async function processRoutes(app: FastifyInstance) {
         notes: v.notes ?? null,
       },
     })
+    await syncLegAutoTasks(legId) // unidad/operador recién asignados
     return reply.status(201).send(vehicle)
   })
 
@@ -373,14 +379,23 @@ export async function processRoutes(app: FastifyInstance) {
         ...(v.notes !== undefined ? { notes: v.notes } : {}),
       },
     })
+    await syncLegAutoTasks(existing.legId)
     return reply.send(vehicle)
   })
 
   app.delete("/leg-vehicles/:id", { preHandler: requirePermission("shipments.write") }, async (request, reply) => {
     const { id } = request.params as { id: string }
-    const existing = await prisma.legVehicle.findUnique({ where: { id }, select: { id: true } })
+    const existing = await prisma.legVehicle.findUnique({ where: { id }, select: { id: true, legId: true, cartaPorteInvoiceId: true } })
     if (!existing) return reply.status(404).send({ error: "Unidad no encontrada" })
+    // CANDADO: borrar una unidad con Carta Porte timbrada orfanaría el CFDI fiscal.
+    if (existing.cartaPorteInvoiceId) {
+      const cp = await prisma.invoice.findUnique({ where: { id: existing.cartaPorteInvoiceId }, select: { status: true } })
+      if (cp && cp.status !== "cancelled") {
+        return reply.status(409).send({ error: "Esta unidad tiene una Carta Porte timbrada. Cancela el CFDI antes de eliminar la unidad." })
+      }
+    }
     await prisma.legVehicle.delete({ where: { id } })
+    await syncLegAutoTasks(existing.legId) // quitar la unidad puede desmarcar tareas
     return reply.status(204).send()
   })
 
@@ -397,7 +412,22 @@ export async function processRoutes(app: FastifyInstance) {
     const invoice = ctx.unit.cartaPorteInvoiceId
       ? await prisma.invoice.findUnique({ where: { id: ctx.unit.cartaPorteInvoiceId }, select: { id: true, series: true, folio: true, status: true, total: true } })
       : null
-    return reply.send({ ...readiness, defaultTipo, invoice })
+
+    // Previsualización del complemento (tolerante a datos faltantes) — para ver antes de timbrar
+    const lo = (ctx.leg.origin ?? {}) as { name?: string; rfc?: string; zip?: string; state?: string; address?: string }
+    const ld = (ctx.leg.destination ?? {}) as { name?: string; rfc?: string; zip?: string; state?: string; address?: string }
+    const v = ctx.vehicle, op = ctx.operator
+    const preview = {
+      distanciaKm: ctx.leg.distanceKm != null ? Number(ctx.leg.distanceKm) : null,
+      origen: { rfc: lo.rfc ?? null, nombre: lo.name ?? null, cp: lo.zip ?? null, estado: lo.state ?? null, domicilio: lo.address ?? null, fecha: ctx.leg.actualPickupAt ?? ctx.leg.plannedPickupAt ?? null },
+      destino: { rfc: ld.rfc ?? null, nombre: ld.name ?? null, cp: ld.zip ?? null, estado: ld.state ?? null, domicilio: ld.address ?? null, fecha: ctx.leg.actualDeliveryAt ?? ctx.leg.plannedDeliveryAt ?? null },
+      autotransporte: v ? { placa: v.plates, config: v.configVehicular, anio: v.year, permSct: v.permSct, numPermiso: v.permSctNumber, aseguradora: v.insurer, poliza: v.insurancePolicy } : null,
+      remolques: [ctx.unit.trailer1Plate, ctx.unit.trailer2Plate].filter(Boolean) as string[],
+      operador: op ? { rfc: op.rfc, nombre: op.name, licencia: op.licenseNumber } : null,
+      mercancias: ctx.merchandise.map((m) => ({ clave: m.productKey, descripcion: m.description, cantidad: Number(m.quantity), unidad: m.unitKey, pesoKg: m.weight != null ? Number(m.weight) : null })),
+      pesoTotalKg: ctx.merchandise.reduce((a, m) => a + (m.weight != null ? Number(m.weight) : 0), 0),
+    }
+    return reply.send({ ...readiness, defaultTipo, invoice, preview })
   })
 
   // Timbrar la Carta Porte de la unidad (Ingreso+CP por defecto; Traslado+CP opción)
@@ -441,11 +471,14 @@ export async function processRoutes(app: FastifyInstance) {
     const facturamaSerie = await getSetting("invoicing.facturamaSerie", "")
     const complemento = buildCartaPorteComplemento(ctx)
 
-    // Items: Ingreso = flete con IVA; Traslado = valor 0 sin impuestos (S01)
+    // Items: Ingreso = flete con IVA (+ retención 4% si receptor PM); Traslado = valor 0 sin impuestos (S01)
     const amount = body.data.freightAmount ?? 0
     const subtotal = round2(amount)
-    const tax = isIngreso ? round2(subtotal * 0.16) : 0
-    const total = round2(subtotal + tax)
+    const tax = isIngreso ? round2(subtotal * IVA_RATE) : 0
+    // El flete es autotransporte (78101800): receptor PM retiene 4% de IVA
+    const retains = isIngreso && personaFromRfc(customer.rfc) === "moral" && isAutotransporteCarga("78101800")
+    const retention = retains ? round2(subtotal * IVA_RETENTION_RATE) : 0
+    const total = round2(subtotal + tax - retention)
     const item = {
       Quantity: 1,
       ProductCode: "78101800",
@@ -455,7 +488,12 @@ export async function processRoutes(app: FastifyInstance) {
       UnitPrice: subtotal,
       Subtotal: subtotal,
       TaxObject: isIngreso ? "02" : "01",
-      Taxes: isIngreso ? [{ Total: tax, Name: "IVA", Base: subtotal, Rate: 0.16, IsRetention: false }] : [],
+      Taxes: isIngreso
+        ? [
+            { Total: tax, Name: "IVA", Base: subtotal, Rate: IVA_RATE, IsRetention: false },
+            ...(retains ? [{ Total: retention, Name: "IVA", Base: subtotal, Rate: IVA_RETENTION_RATE, IsRetention: true }] : []),
+          ]
+        : [],
       Total: total,
     }
 
@@ -506,15 +544,26 @@ export async function processRoutes(app: FastifyInstance) {
           paymentForm: customer.defaultPaymentForm ?? "03",
           paymentMethod: customer.defaultPaymentMethod ?? "PUE",
           items: [item] as unknown as Prisma.InputJsonValue,
-          subtotal, tax, total,
+          subtotal, tax, retention, total,
         },
       }),
     )
     await prisma.legVehicle.update({ where: { id }, data: { cartaPorteInvoiceId: invoice.id } })
+    await syncLegAutoTasks(ctx.leg.id) // CFDI timbrado → marca "timbrar_cp"
 
     try {
-      const xml = await getCFDIXml(result.Id)
-      await prisma.invoice.update({ where: { id: invoice.id }, data: { xmlContent: Buffer.from(xml, "base64").toString("utf-8") } })
+      const xmlBase64 = await getCFDIXml(result.Id)
+      const xml = Buffer.from(xmlBase64, "base64").toString("utf-8")
+      const fiscal = parseCfdiIdentifiers(xml)
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          xmlContent: xml,
+          ...(fiscal.uuid ? { uuid: fiscal.uuid } : {}),
+          ...(fiscal.serie ? { satSerie: fiscal.serie } : {}),
+          ...(fiscal.folio ? { satFolio: fiscal.folio } : {}),
+        },
+      })
     } catch (err) {
       request.log.warn(err, "No se pudo cachear XML de Carta Porte; on-demand")
     }
@@ -528,7 +577,7 @@ export async function processRoutes(app: FastifyInstance) {
     status: z.enum(["draft", "sent", "accepted", "rejected"]).optional(),
     currency: z.string().optional(),
     validUntil: z.string().datetime().nullish(),
-    items: z.array(z.object({ concept: z.string(), amount: z.number(), productKey: z.string().optional() })).optional(),
+    items: z.array(z.object({ concept: z.string(), amount: z.number(), productKey: z.string().optional(), estimatedCost: z.number().nonnegative().optional() })).optional(),
     estimatedCost: z.number().nonnegative().nullish(),
     notes: z.string().nullish(),
   })
@@ -548,12 +597,14 @@ export async function processRoutes(app: FastifyInstance) {
     if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
 
     const d = body.data
+    // El costo a nivel cotización se deriva de la suma de costos por servicio (si se mandan items)
+    const itemsCost = d.items?.reduce((a, i) => a + (Number(i.estimatedCost) || 0), 0)
     const data = {
       ...(d.status !== undefined ? { status: d.status } : {}),
       ...(d.currency !== undefined ? { currency: d.currency } : {}),
       ...(d.validUntil !== undefined ? { validUntil: toDate(d.validUntil) } : {}),
-      ...(d.items !== undefined ? { items: d.items as Prisma.InputJsonValue } : {}),
-      ...(d.estimatedCost !== undefined ? { estimatedCost: d.estimatedCost } : {}),
+      ...(d.items !== undefined ? { items: d.items as Prisma.InputJsonValue, estimatedCost: itemsCost ?? 0 } : {}),
+      ...(d.items === undefined && d.estimatedCost !== undefined ? { estimatedCost: d.estimatedCost } : {}),
       ...(d.notes !== undefined ? { notes: d.notes } : {}),
     }
     const quote = await prisma.shipmentQuote.upsert({
@@ -561,7 +612,42 @@ export async function processRoutes(app: FastifyInstance) {
       create: { shipmentId: id, ...data },
       update: data,
     })
+
+    // Historial: snapshot si cambiaron los cargos o el estado respecto a la última revisión
+    const finalItems = (quote.items as { amount?: number }[] | null) ?? []
+    const subtotal = finalItems.reduce((a, i) => a + (Number(i.amount) || 0), 0)
+    const last = await prisma.quoteRevision.findFirst({ where: { shipmentId: id }, orderBy: { version: "desc" } })
+    const changed = !last
+      || JSON.stringify(last.items ?? []) !== JSON.stringify(quote.items ?? [])
+      || last.status !== quote.status
+    if (changed) {
+      await prisma.quoteRevision.create({
+        data: {
+          shipmentId: id,
+          version: (last?.version ?? 0) + 1,
+          status: quote.status,
+          currency: quote.currency,
+          items: (quote.items ?? []) as Prisma.InputJsonValue,
+          subtotal,
+          estimatedCost: quote.estimatedCost,
+          notes: quote.notes,
+          createdBy: request.session?.user.id ?? null,
+        },
+      })
+    }
+
+    await syncShipmentAutoTasks(id) // cotizar
     return reply.send(quote)
+  })
+
+  // Historial de revisiones de la cotización
+  app.get("/shipments/:id/quote/revisions", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const revisions = await prisma.quoteRevision.findMany({
+      where: { shipmentId: id },
+      orderBy: { version: "desc" },
+    })
+    return reply.send(revisions)
   })
 
   // ── Tareas (de fase y de tramo) ─────────────────────────────────────────────
@@ -573,6 +659,11 @@ export async function processRoutes(app: FastifyInstance) {
 
     const existing = await prisma.shipmentTask.findUnique({ where: { id: taskId } })
     if (!existing) return reply.status(404).send({ error: "Tarea no encontrada" })
+
+    // Tareas auto-derivadas (cotizar/planear_tramos/facturar) no se cambian de estado a mano.
+    if ((AUTO_SHIPMENT_TASK_CODES as readonly string[]).includes(existing.code) && body.data.status !== undefined && body.data.status !== existing.status) {
+      return reply.status(422).send({ error: "Esta tarea se marca sola al llenar la información (cotización, tramos, facturación). No se cambia a mano." })
+    }
 
     if (body.data.status === "done" && existing.status !== "done") {
       const blocker = await shipmentTaskBlocker(existing.code, existing.shipmentId)
@@ -594,6 +685,11 @@ export async function processRoutes(app: FastifyInstance) {
 
     const existing = await prisma.legTask.findUnique({ where: { id: taskId } })
     if (!existing) return reply.status(404).send({ error: "Tarea no encontrada" })
+
+    // Las tareas auto-derivadas (ruta/unidad/timbrado) NO se cambian de estado a mano.
+    if ((AUTO_LEG_TASK_CODES as readonly string[]).includes(existing.code) && body.data.status !== undefined && body.data.status !== existing.status) {
+      return reply.status(422).send({ error: "Esta tarea se marca sola según los datos del tramo (ruta, unidad/operador, timbrado). No se cambia a mano." })
+    }
 
     if (body.data.status === "done" && existing.status !== "done") {
       // Recolección/entrega: la fecha real es del TRAMO (fuente única, alimenta Carta Porte

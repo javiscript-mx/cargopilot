@@ -15,6 +15,9 @@ export const SETTING_DEFAULTS: Record<string, unknown> = {
   "invoicing.regimenFiscal": "601",
   "shipments.folioPrefix": "EXP",
   "storage.bucket": "",
+  "appearance.primaryColor": "#284a70",
+  "appearance.accentColor": "#f49c2f",
+  "appearance.menuColor": "#111d2d",
 }
 
 const PatchSettingsSchema = z.record(z.string(), z.unknown())

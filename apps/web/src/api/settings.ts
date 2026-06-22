@@ -11,7 +11,12 @@ export interface AppSettings {
   "invoicing.regimenFiscal": string
   "shipments.folioPrefix": string
   "storage.bucket": string
-  [key: string]: unknown
+  "appearance.primaryColor": string
+  "appearance.accentColor": string
+  "appearance.menuColor": string
+  "branding.systemName": string
+  "branding.logoDataUrl": string
+  [key: string]: unknown // incluye modules.<key> = "true" | "false"
 }
 
 export const settingsApi = {

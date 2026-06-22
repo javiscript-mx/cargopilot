@@ -18,12 +18,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
           "disabled:pointer-events-none disabled:opacity-50",
           {
-            "bg-[--color-primary] text-[--color-primary-foreground] hover:opacity-90 focus-visible:ring-[--color-primary]":
+            "bg-[var(--color-primary)] text-white hover:opacity-90 focus-visible:ring-[var(--color-primary)]":
               variant === "default",
-            "border border-[--color-border] bg-transparent hover:bg-[--color-muted]":
+            "border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]":
               variant === "outline",
-            "hover:bg-[--color-muted]": variant === "ghost",
-            "bg-[--color-destructive] text-white hover:opacity-90": variant === "destructive",
+            "hover:bg-[var(--color-muted)]": variant === "ghost",
+            "bg-[var(--color-destructive)] text-white hover:opacity-90": variant === "destructive",
           },
           {
             "h-8 px-3 text-sm": size === "sm",

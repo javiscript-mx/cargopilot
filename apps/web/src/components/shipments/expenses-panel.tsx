@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm"
 import { useCan } from "@/lib/permissions"
 import { useCatalog } from "@/hooks/use-catalog"
-import { collectErrors, validateRequired, validateQuantity, scrollToFirstError } from "@/lib/validators"
+import { collectErrors, validateRequired, validateQuantity, validateDateField, findIncompleteDateInputs, scrollToFirstError } from "@/lib/validators"
 import { PendingFilesPicker } from "@/components/ui/documents-section"
 import { expensesApi, EXPENSE_STATUS, type ShipmentExpense } from "@/api/expenses"
 import { documentsApi } from "@/api/documents"
@@ -101,7 +101,9 @@ export function ExpensesPanel({ shipmentId }: { shipmentId: string }) {
     const errs = collectErrors({
       concept: validateRequired(form.concept, "Concepto"),
       amount: validateQuantity(form.amount),
+      expenseDate: validateDateField(form.expenseDate, { notFuture: true, label: "La fecha del gasto" }),
     })
+    for (const inc of findIncompleteDateInputs(document.getElementById("expense-form") ?? document)) errs[inc.id] = inc.message
     // La evidencia (folio o documento) NO es obligatoria al guardar: si falta, el gasto
     // queda "pendiente de evidencia" y se exige antes de finalizar el expediente.
     if (Object.keys(errs).length) { setErrors(errs); toast.error("Revisa los campos marcados", "Hay datos por corregir."); scrollToFirstError(); return }
@@ -186,7 +188,7 @@ export function ExpensesPanel({ shipmentId }: { shipmentId: string }) {
             <Select id="supplierId" label="Proveedor (opcional)" placeholder="Sin asignar" options={suppliers.filter((s) => s.active).map((s) => ({ value: s.id, label: s.name }))} value={form.supplierId} onChange={set("supplierId")} />
             <div className="grid grid-cols-2 gap-3">
               <Input id="reference" label="Referencia / folio de factura" value={form.reference} onChange={set("reference")} error={errors.reference} placeholder="Folio del proveedor" />
-              <Input id="expenseDate" label="Fecha (opcional)" type="date" value={form.expenseDate} onChange={set("expenseDate")} />
+              <Input id="expenseDate" label="Fecha (opcional)" type="date" value={form.expenseDate} onChange={set("expenseDate")} error={errors.expenseDate} />
             </div>
             <Input id="notes" label="Notas (opcional)" value={form.notes} onChange={set("notes")} />
             {/* Evidencia obligatoria: factura (folio arriba) o comprobante adjunto */}

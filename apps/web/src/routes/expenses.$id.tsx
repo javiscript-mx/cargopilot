@@ -18,6 +18,7 @@ import { useCatalog } from "@/hooks/use-catalog"
 import { authClient } from "@/lib/auth-client"
 import { roleHasPermission } from "@hm/shared"
 import { expensesApi, EXPENSE_STATUS, PAYMENT_METHODS, type PaymentMethod } from "@/api/expenses"
+import { collectErrors, validateDateField, findIncompleteDateInputs, scrollToFirstError } from "@/lib/validators"
 
 export const Route = createFileRoute("/expenses/$id")({
   beforeLoad: async () => {
@@ -55,10 +56,19 @@ function ExpenseDetailPage() {
 
   const [paying, setPaying] = useState(false)
   const [payForm, setPayForm] = useState({ amount: "", method: "transferencia" as PaymentMethod, reference: "", paidAt: "" })
+  const [payErrors, setPayErrors] = useState<Record<string, string>>({})
   const payM = useMutation({
     mutationFn: () => expensesApi.registerPayment(id, { amount: num(payForm.amount), method: payForm.method, reference: payForm.reference || null, paidAt: payForm.paidAt ? new Date(payForm.paidAt).toISOString() : null }),
     onSuccess: () => { invalidate(); setPaying(false); toast.success("Pago registrado") }, onError,
   })
+  // La fecha de pago no puede ser futura (un pago registrado ya ocurrió).
+  function handlePay(ev: React.FormEvent) {
+    ev.preventDefault()
+    const errs = collectErrors({ "pay-date": validateDateField(payForm.paidAt, { notFuture: true, label: "La fecha de pago" }) })
+    for (const inc of findIncompleteDateInputs(document.getElementById("pay-form") ?? document)) errs[inc.id] = inc.message
+    if (Object.keys(errs).length) { setPayErrors(errs); scrollToFirstError(); return }
+    setPayErrors({}); payM.mutate()
+  }
 
   if (isLoading || !e) {
     return <AppLayout><div className="flex h-40 items-center justify-center text-[var(--color-muted-foreground)]">Cargando gasto...</div></AppLayout>
@@ -67,7 +77,7 @@ function ExpenseDetailPage() {
   const st = EXPENSE_STATUS[e.status]
   const paid = num(e.paidAmount)
   const remaining = num(e.amount) - paid
-  function openPay() { setPayForm({ amount: remaining.toFixed(2), method: "transferencia", reference: "", paidAt: new Date().toISOString().slice(0, 10) }); setPaying(true) }
+  function openPay() { setPayForm({ amount: remaining.toFixed(2), method: "transferencia", reference: "", paidAt: new Date().toISOString().slice(0, 10) }); setPayErrors({}); setPaying(true) }
 
   return (
     <AppLayout>
@@ -184,7 +194,7 @@ function ExpenseDetailPage() {
       {/* Modal de pago */}
       {paying && (
         <Dialog open onClose={() => setPaying(false)} title={`Registrar pago — ${e.concept}`} className="max-w-md">
-          <form onSubmit={(ev) => { ev.preventDefault(); payM.mutate() }} className="flex flex-col gap-4">
+          <form id="pay-form" onSubmit={handlePay} className="flex flex-col gap-4">
             <div className="rounded-md bg-[var(--color-muted)] p-3 text-sm">
               <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Pagado</span><span>{money(paid, e.currency)}</span></div>
               <div className="mt-0.5 flex justify-between border-t border-[var(--color-border)] pt-0.5 font-medium"><span>Saldo</span><span>{money(remaining, e.currency)}</span></div>
@@ -192,7 +202,7 @@ function ExpenseDetailPage() {
             <MoneyInput label="Monto del pago" currency={e.currency} value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Select id="pay-method" label="Método" options={PAYMENT_METHODS} value={payForm.method} onChange={(ev) => setPayForm((f) => ({ ...f, method: ev.target.value as PaymentMethod }))} />
-              <Input id="pay-date" type="date" label="Fecha de pago" value={payForm.paidAt} onChange={(ev) => setPayForm((f) => ({ ...f, paidAt: ev.target.value }))} />
+              <Input id="pay-date" type="date" label="Fecha de pago" value={payForm.paidAt} onChange={(ev) => setPayForm((f) => ({ ...f, paidAt: ev.target.value }))} error={payErrors["pay-date"]} />
             </div>
             <Input id="pay-ref" label="Referencia (opcional)" placeholder="SPEI / folio / cheque" value={payForm.reference} onChange={(ev) => setPayForm((f) => ({ ...f, reference: ev.target.value }))} />
             <div className="flex justify-end gap-2">

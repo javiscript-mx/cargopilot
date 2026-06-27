@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { FileText, Upload, Download, Trash2, AlertCircle, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +11,24 @@ import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm"
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.xml,.doc,.docx,.xls,.xlsx"
+
+// El catálogo `document_type` es uno solo (mezcla evidencia operativa con fiscal/legal).
+// Cada contexto ofrece SOLO sus tipos → en un expediente ya no aparece "Cotización"/"Factura"
+// como "tipo de evidencia" (eso confundía: el usuario pensaba que ahí manejaba la cotización).
+const DOC_TYPES_BY_ENTITY: Partial<Record<DocumentEntityType, string[]>> = {
+  shipment: ["pod", "evidencia_recoleccion", "foto_mercancia", "carta_instruccion", "otro"],
+  supplier: ["constancia_fiscal", "identificacion", "contrato", "otro"],
+  customer: ["constancia_fiscal", "identificacion", "contrato", "otro"],
+  invoice: ["factura", "cfdi_carta_porte", "otro"],
+  expense: ["factura", "otro"],
+}
+const EMPTY_HINT_BY_ENTITY: Partial<Record<DocumentEntityType, string>> = {
+  shipment: "POD/acuse de entrega, fotos de la carga, cartas de instrucción...",
+  supplier: "constancia fiscal, identificación, contratos...",
+  customer: "constancia fiscal, identificación, contratos...",
+  invoice: "representación impresa, acuses...",
+  expense: "factura del proveedor, recibo, ticket...",
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -100,9 +118,11 @@ interface DocumentsSectionProps {
   readOnly?: boolean
   /** Sin Card propia ni título — para usar dentro de pestañas u otros contenedores */
   bare?: boolean
+  /** Banner de contexto opcional arriba: qué documentos van aquí / a dónde va lo demás */
+  intro?: ReactNode
 }
 
-export function DocumentsSection({ entityType, entityId, readOnly = false, bare = false }: DocumentsSectionProps) {
+export function DocumentsSection({ entityType, entityId, readOnly = false, bare = false, intro }: DocumentsSectionProps) {
   const queryClient = useQueryClient()
   const toast = useToast()
   const confirm = useConfirm()
@@ -113,8 +133,12 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
   const [kind, setKind] = useState("")
   const [notes, setNotes] = useState("")
   const [file, setFile] = useState<File | null>(null)
-  const { simpleOptions: typeOptions } = useCatalog("document_type")
-  const typeLabel = (code: string | null) => (code ? typeOptions.find((o) => o.value === code)?.label ?? code : null)
+  const { simpleOptions: allTypeOptions } = useCatalog("document_type")
+  const typeLabel = (code: string | null) => (code ? allTypeOptions.find((o) => o.value === code)?.label ?? code : null)
+  // El dropdown de subida ofrece solo los tipos del contexto; el label de docs ya existentes
+  // se sigue resolviendo contra el catálogo completo (no se pierde nada de lo ya cargado).
+  const allowedTypes = DOC_TYPES_BY_ENTITY[entityType]
+  const uploadTypeOptions = allowedTypes ? allTypeOptions.filter((o) => allowedTypes.includes(o.value)) : allTypeOptions
 
   const { data: status } = useQuery({
     queryKey: ["documents-status"],
@@ -193,7 +217,7 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
         <span className="text-sm font-medium">Nueva evidencia</span>
         <button type="button" onClick={resetForm} className="rounded p-1 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"><X className="h-4 w-4" /></button>
       </div>
-      <Select id="doc-kind" label="Tipo de evidencia" placeholder="Selecciona el tipo..." options={typeOptions} value={kind} onChange={(e) => setKind(e.target.value)} />
+      <Select id="doc-kind" label="Tipo de evidencia" placeholder="Selecciona el tipo..." options={uploadTypeOptions} value={kind} onChange={(e) => setKind(e.target.value)} />
       <Input id="doc-notes" label="Observación (opcional)" placeholder="Referencia, detalle de la evidencia..." value={notes} onChange={(e) => setNotes(e.target.value)} />
       <input ref={fileInputRef} type="file" accept={ACCEPT} className="hidden" onChange={handleFileChange} />
       <div className="flex items-center gap-2">
@@ -222,7 +246,7 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
           <p className="py-3 text-center text-sm text-[var(--color-muted-foreground)]">Cargando...</p>
         ) : documents.length === 0 ? (
           <p className="py-3 text-center text-sm text-[var(--color-muted-foreground)]">
-            Sin documentos. {!readOnly && "Sube constancia fiscal, contratos, comprobantes..."}
+            Sin documentos. {!readOnly && `Sube ${EMPTY_HINT_BY_ENTITY[entityType] ?? "los comprobantes de la operación..."}`}
           </p>
         ) : (
           <div className="flex flex-col divide-y divide-[var(--color-border)]">
@@ -270,6 +294,7 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
   if (bare) {
     return (
       <div className="flex flex-col gap-3">
+        {intro}
         {action && <div className="flex justify-end">{action}</div>}
         {body}
       </div>
@@ -282,7 +307,7 @@ export function DocumentsSection({ entityType, entityId, readOnly = false, bare 
         <CardTitle className="text-base">Documentos</CardTitle>
         {action}
       </CardHeader>
-      <CardContent>{body}</CardContent>
+      <CardContent>{intro && <div className="mb-3">{intro}</div>}{body}</CardContent>
     </Card>
   )
 }

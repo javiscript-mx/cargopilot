@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Info, Send, MapPinned, CalendarClock } from "lucide-react"
+import { Info, Send, MapPinned, CalendarClock, AlertTriangle } from "lucide-react"
 import { Drawer } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button"
 import { AddressInput, type AddressValue } from "@/components/ui/address-input"
 import { useToast } from "@/components/ui/toast"
 import { geocodeAddress, drivingDistanceKm } from "@/lib/maps"
-import { validateRfc, validateCp, collectErrors, scrollToFirstError } from "@/lib/validators"
+import { validateRfc, validateCp, validateDateField, findIncompleteDateInputs, collectErrors, scrollToFirstError } from "@/lib/validators"
 import { processApi, type ProcessLeg, type LegLocation, type LegPatch } from "@/api/process"
 import { shipmentsApi } from "@/api/shipments"
 import { customersApi, type CustomerAddress } from "@/api/customers"
+import { estadoFromCp } from "@/lib/postal"
 
 const LEG_STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
@@ -37,6 +38,7 @@ const ESTADOS = [
   ["VER", "Veracruz"], ["YUC", "Yucatán"], ["ZAC", "Zacatecas"],
 ] as const
 const ESTADO_OPTIONS = ESTADOS.map(([value, label]) => ({ value, label: `${label} (${value})` }))
+const estadoLabel = (code: string): string => ESTADOS.find(([c]) => c === code)?.[1] ?? code
 // Mapea un texto libre de estado (p. ej. de una dirección de cliente) al código SAT
 function toEstadoCode(v: string | undefined | null): string {
   if (!v) return ""
@@ -44,12 +46,6 @@ function toEstadoCode(v: string | undefined | null): string {
   const hit = ESTADOS.find(([code, name]) => code.toLowerCase() === t || name.toLowerCase() === t)
   return hit ? hit[0] : ""
 }
-// Nombre legible de un código c_Estado SAT
-function estadoName(code: string | undefined | null): string {
-  if (!code) return ""
-  return ESTADOS.find(([c]) => c === code)?.[1] ?? code
-}
-
 // datetime-local <-> ISO respetando zona horaria local
 const toLocalInput = (iso: string | null | undefined): string => {
   if (!iso) return ""
@@ -75,9 +71,9 @@ export function LegDrawer({
     scope: leg.scope,
     status: leg.status,
     originName: o.name ?? "", originRfc: o.rfc ?? "", originZip: o.zip ?? "", originState: o.state ?? "", originAddress: o.address ?? "",
-    originLat: o.lat ?? null as number | null, originLng: o.lng ?? null as number | null, originAddrId: "",
+    originLat: o.lat ?? null as number | null, originLng: o.lng ?? null as number | null, originAddrId: "", originGoogleZip: o.zip ?? "",
     destName: d.name ?? "", destRfc: d.rfc ?? "", destZip: d.zip ?? "", destState: d.state ?? "", destAddress: d.address ?? "",
-    destLat: d.lat ?? null as number | null, destLng: d.lng ?? null as number | null, destAddrId: "",
+    destLat: d.lat ?? null as number | null, destLng: d.lng ?? null as number | null, destAddrId: "", destGoogleZip: d.zip ?? "",
     distanceKm: leg.distanceKm ?? "",
     plannedPickupAt: toLocalInput(leg.plannedPickupAt),
     plannedDeliveryAt: toLocalInput(leg.plannedDeliveryAt),
@@ -127,9 +123,20 @@ export function LegDrawer({
       const lat = detail.lat ?? null
       const lng = detail.lng ?? null
       return side === "origin"
-        ? { ...f, originAddress: formatted, originZip: zip || f.originZip, originState: state || f.originState, originLat: lat, originLng: lng }
-        : { ...f, destAddress: formatted, destZip: zip || f.destZip, destState: state || f.destState, destLat: lat, destLng: lng }
+        ? { ...f, originAddress: formatted, originZip: zip || f.originZip, originState: state || f.originState, originLat: lat, originLng: lng, originGoogleZip: zip || f.originGoogleZip }
+        : { ...f, destAddress: formatted, destZip: zip || f.destZip, destState: state || f.destState, destLat: lat, destLng: lng, destGoogleZip: zip || f.destGoogleZip }
     })
+  }
+
+  // El CP determina el estado (prefijo SEPOMEX). Al teclear el CP autollenamos el c_Estado;
+  // si el prefijo aún no es válido (p. ej. 1 dígito) se deja el estado como estaba.
+  function onZipChange(side: "origin" | "dest", value: string) {
+    const est = estadoFromCp(value)
+    // El estado autollena desde el CP SOLO si está vacío; si ya viene del domicilio (Google)
+    // no lo pisamos — una discrepancia CP↔domicilio se avisa abajo, no se oculta.
+    setForm((f) => side === "origin"
+      ? { ...f, originZip: value, ...(est && !f.originState ? { originState: est } : {}) }
+      : { ...f, destZip: value, ...(est && !f.destState ? { destState: est } : {}) })
   }
 
   // Precarga desde el customer master: direcciones del cliente del expediente → ubicación del tramo
@@ -149,16 +156,16 @@ export function LegDrawer({
     const lat = a.lat ?? null
     const lng = a.lng ?? null
     setForm((f) => side === "origin"
-      ? { ...f, originName: name, originRfc: rfc, originZip: zip, originState: state || f.originState, originAddress: address, originLat: lat, originLng: lng, originAddrId: addrId }
-      : { ...f, destName: name, destRfc: rfc, destZip: zip, destState: state || f.destState, destAddress: address, destLat: lat, destLng: lng, destAddrId: addrId })
+      ? { ...f, originName: name, originRfc: rfc, originZip: zip, originState: state || f.originState, originAddress: address, originLat: lat, originLng: lng, originAddrId: addrId, originGoogleZip: zip }
+      : { ...f, destName: name, destRfc: rfc, destZip: zip, destState: state || f.destState, destAddress: address, destLat: lat, destLng: lng, destAddrId: addrId, destGoogleZip: zip })
     // Si la dirección del cliente se guardó sin CP/Estado/coords, los completamos
     // geocodificando con Google (antes solo se llenaban al elegir en el mapa → se veía como bug).
     if (address && (!zip || !state || lat == null)) {
       const geo = await geocodeAddress(address)
       if (geo) {
         setForm((f) => side === "origin"
-          ? { ...f, originZip: geo.postalCode ?? f.originZip, originState: toEstadoCode(geo.state) || f.originState, originLat: geo.lat ?? f.originLat, originLng: geo.lng ?? f.originLng }
-          : { ...f, destZip: geo.postalCode ?? f.destZip, destState: toEstadoCode(geo.state) || f.destState, destLat: geo.lat ?? f.destLat, destLng: geo.lng ?? f.destLng })
+          ? { ...f, originZip: geo.postalCode ?? f.originZip, originState: toEstadoCode(geo.state) || f.originState, originLat: geo.lat ?? f.originLat, originLng: geo.lng ?? f.originLng, originGoogleZip: geo.postalCode ?? f.originGoogleZip }
+          : { ...f, destZip: geo.postalCode ?? f.destZip, destState: toEstadoCode(geo.state) || f.destState, destLat: geo.lat ?? f.destLat, destLng: geo.lng ?? f.destLng, destGoogleZip: geo.postalCode ?? f.destGoogleZip })
       }
     }
   }
@@ -225,14 +232,31 @@ export function LegDrawer({
     if (sameLocation()) {
       errs["destAddress"] = "El destino no puede ser el mismo que el origen."
     }
-    // Recolección no se programa en el pasado (solo si el usuario la cambió a una fecha pasada).
-    const nowL = toLocalInput(new Date().toISOString())
+    // El CP debe mapear a un estado mexicano (prefijo SEPOMEX) — atrapa CPs imposibles antes de
+    // timbrar. Solo si el formato (5 dígitos) ya pasó, para no tapar el error de validateCp.
+    if (form.originZip && !errs["originZip"] && !estadoFromCp(form.originZip)) errs["originZip"] = "CP no corresponde a ningún estado de México."
+    if (form.destZip && !errs["destZip"] && !estadoFromCp(form.destZip)) errs["destZip"] = "CP no corresponde a ningún estado de México."
+    // Recolección y ETA no se programan en el pasado (solo si el usuario las cambió
+    // respecto a lo guardado — no forzamos editar tramos antiguos). La ETA además no
+    // puede ser anterior a la recolección.
     const originalPickup = toLocalInput(leg.plannedPickupAt)
-    if (form.plannedPickupAt && form.plannedPickupAt !== originalPickup && form.plannedPickupAt < nowL) {
-      errs["plannedPickupAt"] = "La recolección no puede programarse en el pasado."
+    const originalDelivery = toLocalInput(leg.plannedDeliveryAt)
+    if (form.plannedPickupAt && form.plannedPickupAt !== originalPickup) {
+      const err = validateDateField(form.plannedPickupAt, { notPast: true, label: "La recolección" })
+      if (err) errs["plannedPickupAt"] = err
     }
-    if (form.plannedPickupAt && form.plannedDeliveryAt && form.plannedDeliveryAt < form.plannedPickupAt) {
-      errs["plannedDeliveryAt"] = "La entrega no puede ser antes de la recolección."
+    if (form.plannedDeliveryAt && form.plannedDeliveryAt !== originalDelivery) {
+      const err = validateDateField(form.plannedDeliveryAt, {
+        notPast: true,
+        minLocal: form.plannedPickupAt || undefined,
+        minMessage: "La entrega no puede ser antes de la recolección.",
+        label: "La entrega (ETA)",
+      })
+      if (err) errs["plannedDeliveryAt"] = err
+    }
+    // Fechas a medio llenar (p. ej. datetime-local sin AM/PM): bloquear, no ignorar.
+    for (const inc of findIncompleteDateInputs(document.getElementById("leg-form") ?? document)) {
+      errs[inc.id] = inc.message
     }
     if (Object.keys(errs).length) {
       setErrors(errs)
@@ -245,6 +269,15 @@ export function LegDrawer({
   }
 
   const foraneo = form.scope === "foraneo"
+  // Congruencia CP ↔ domicilio: estado que implica el CP vs estado del domicilio (Google).
+  const originCpEstado = estadoFromCp(form.originZip)
+  const destCpEstado = estadoFromCp(form.destZip)
+  const originStateMismatch = Boolean(originCpEstado && form.originState && originCpEstado !== form.originState)
+  const destStateMismatch = Boolean(destCpEstado && form.destState && destCpEstado !== form.destState)
+  // El usuario cambió el CP respecto al que trae el domicilio (Google/cliente). Cubre cambios
+  // dentro del MISMO estado (otro municipio) que el cruce de estado no detecta.
+  const originCpChanged = Boolean(form.originGoogleZip && form.originZip && form.originZip !== form.originGoogleZip)
+  const destCpChanged = Boolean(form.destGoogleZip && form.destZip && form.destZip !== form.destGoogleZip)
 
   return (
     <Drawer
@@ -303,15 +336,28 @@ export function LegDrawer({
           <Input id="originRfc" label={foraneo ? "RFC del remitente (obligatorio)" : "RFC del remitente"} value={form.originRfc} onChange={set("originRfc")} maxLength={13} error={errors["originRfc"]} />
           <AddressInput id="originAddress" label="Domicilio de recolección (Google Maps)" placeholder="Busca el origen en el mapa…"
             value={form.originAddress} onChange={(formatted, detail) => onPlace("origin", formatted, detail)} />
-          {form.originZip && form.originState ? (
-            <p className="-mt-1 text-xs text-[var(--color-muted-foreground)]">
-              Ubicación: CP <span className="font-medium text-[var(--color-foreground)]">{form.originZip}</span> · {estadoName(form.originState)} ({form.originState})
-            </p>
-          ) : form.originAddress ? (
-            <div className="grid grid-cols-2 gap-3 rounded-md border border-amber-300 bg-amber-50/40 p-2">
-              <Input id="originZip" label="CP (completar)" value={form.originZip} onChange={set("originZip")} maxLength={5} error={errors["originZip"]} />
+          {/* CP + Estado van al CFDI/Carta Porte: SIEMPRE editables y corregibles (Google a nivel
+              ciudad a veces no trae CP → se completa a mano). Antes la caja se desmontaba al teclear
+              el 1er dígito —zip&&state se volvía true y cambiaba a una vista read-only—, por eso
+              "solo dejaba poner un número y se cerraba". El ámbar resalta sólo si falta el CP. */}
+          {form.originAddress && (
+            <div className={`grid grid-cols-2 gap-3 rounded-md border p-2 ${
+              form.originZip.length === 5 && form.originState ? "border-[var(--color-border)]" : "border-amber-300 bg-amber-50/40"
+            }`}>
+              <Input id="originZip" label={form.originZip ? "CP" : "CP (completar)"} value={form.originZip} onChange={(e) => onZipChange("origin", e.target.value)} maxLength={5} inputMode="numeric" error={errors["originZip"]} />
               <Select id="originState" label="Estado (SAT)" placeholder="Selecciona…" options={ESTADO_OPTIONS} value={form.originState} onChange={set("originState")} />
             </div>
+          )}
+          {originCpChanged ? (
+            <p className="-mt-1 flex items-start gap-1.5 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Cambiaste el CP del domicilio (<span className="font-medium">{form.originGoogleZip}</span> → <span className="font-medium">{form.originZip}</span>). Verifica que el nuevo CP corresponda a la dirección.</span>
+            </p>
+          ) : originStateMismatch ? (
+            <p className="-mt-1 flex items-start gap-1.5 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>El CP es de <span className="font-medium">{estadoLabel(originCpEstado!)}</span>, pero el domicilio está en <span className="font-medium">{estadoLabel(form.originState)}</span>. Verifica que el CP coincida con el domicilio.</span>
+            </p>
           ) : null}
         </section>
 
@@ -333,15 +379,24 @@ export function LegDrawer({
           <Input id="destRfc" label={foraneo ? "RFC del destinatario (obligatorio)" : "RFC del destinatario"} value={form.destRfc} onChange={set("destRfc")} maxLength={13} error={errors["destRfc"]} />
           <AddressInput id="destAddress" label="Domicilio de entrega (Google Maps)" placeholder="Busca el destino en el mapa…"
             value={form.destAddress} onChange={(formatted, detail) => onPlace("dest", formatted, detail)} error={errors["destAddress"]} />
-          {form.destZip && form.destState ? (
-            <p className="-mt-1 text-xs text-[var(--color-muted-foreground)]">
-              Ubicación: CP <span className="font-medium text-[var(--color-foreground)]">{form.destZip}</span> · {estadoName(form.destState)} ({form.destState})
-            </p>
-          ) : form.destAddress ? (
-            <div className="grid grid-cols-2 gap-3 rounded-md border border-amber-300 bg-amber-50/40 p-2">
-              <Input id="destZip" label="CP (completar)" value={form.destZip} onChange={set("destZip")} maxLength={5} error={errors["destZip"]} />
+          {form.destAddress && (
+            <div className={`grid grid-cols-2 gap-3 rounded-md border p-2 ${
+              form.destZip.length === 5 && form.destState ? "border-[var(--color-border)]" : "border-amber-300 bg-amber-50/40"
+            }`}>
+              <Input id="destZip" label={form.destZip ? "CP" : "CP (completar)"} value={form.destZip} onChange={(e) => onZipChange("dest", e.target.value)} maxLength={5} inputMode="numeric" error={errors["destZip"]} />
               <Select id="destState" label="Estado (SAT)" placeholder="Selecciona…" options={ESTADO_OPTIONS} value={form.destState} onChange={set("destState")} />
             </div>
+          )}
+          {destCpChanged ? (
+            <p className="-mt-1 flex items-start gap-1.5 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Cambiaste el CP del domicilio (<span className="font-medium">{form.destGoogleZip}</span> → <span className="font-medium">{form.destZip}</span>). Verifica que el nuevo CP corresponda a la dirección.</span>
+            </p>
+          ) : destStateMismatch ? (
+            <p className="-mt-1 flex items-start gap-1.5 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>El CP es de <span className="font-medium">{estadoLabel(destCpEstado!)}</span>, pero el domicilio está en <span className="font-medium">{estadoLabel(form.destState)}</span>. Verifica que el CP coincida con el domicilio.</span>
+            </p>
           ) : null}
         </section>
 

@@ -13,7 +13,7 @@ import { useSettings, SETTINGS_DEFAULTS } from "@/hooks/use-settings"
 import { MODULES, type ModuleKey } from "@/hooks/use-modules"
 import { useCatalog } from "@/hooks/use-catalog"
 import { authClient } from "@/lib/auth-client"
-import { validateRfc, validateCp, validateSeries, validateFolioPrefix, validateRequired, validateGcsBucket, collectErrors } from "@/lib/validators"
+import { validateRfc, validateCp, validateSeries, validateFolioPrefix, validateRequired, validateGcsBucket, validateEmail, collectErrors } from "@/lib/validators"
 import { useToast } from "@/components/ui/toast"
 
 export const Route = createFileRoute("/settings")({
@@ -51,10 +51,11 @@ function SettingsPage() {
   const { options: regimenOptions } = useCatalog("sat_tax_regime")
   const [form, setForm] = useState<AppSettings>(SETTINGS_DEFAULTS)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [section, setSection] = useState<"general" | "facturacion" | "mapas" | "modulos" | "sistema">("general")
+  const [section, setSection] = useState<"general" | "facturacion" | "contacto" | "mapas" | "modulos" | "sistema">("general")
   const SECTIONS = [
     { id: "general" as const, label: "General y apariencia" },
     { id: "facturacion" as const, label: "Facturación" },
+    { id: "contacto" as const, label: "Contacto" },
     { id: "mapas" as const, label: "Mapas" },
     { id: "modulos" as const, label: "Módulos" },
     { id: "sistema" as const, label: "Sistema" },
@@ -118,6 +119,7 @@ function SettingsPage() {
       "invoicing.series": validateSeries(form["invoicing.series"] as string),
       "shipments.folioPrefix": validateFolioPrefix(form["shipments.folioPrefix"] as string),
       "storage.bucket": validateGcsBucket(form["storage.bucket"] as string),
+      "company.email": validateEmail(form["company.email"] as string),
     })
     if (Object.keys(errs).length) {
       setErrors(errs)
@@ -341,6 +343,45 @@ function SettingsPage() {
               onChange={(e) => set("invoicing.regimenFiscal", e.target.value)}
               options={regimenOptions}
             />
+          </CardContent>
+        </Card>
+
+        )}
+
+        {section === "contacto" && (
+        /* ── Contacto comercial de la empresa ── */
+        <Card>
+          <CardHeader><CardTitle>Contacto de la empresa</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Datos comerciales que aparecen en los documentos que ve el cliente. Son distintos de los
+              datos <span className="font-medium text-[var(--color-foreground)]">fiscales</span> (RFC, CP, régimen)
+              que viven en <span className="font-medium text-[var(--color-foreground)]">Facturación</span> y van al CFDI.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Input id="companyPhone" label="Teléfono de despacho" value={form["company.phone"] as string}
+                onChange={(e) => set("company.phone", e.target.value)} placeholder="312 123 4567" />
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                <span className="font-medium">Aparece en:</span> el POD (campo Teléfono) y el pie de la cotización. Usa el conmutador/despacho, no un celular personal.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input id="companyEmail" label="Email de contacto" type="email" value={form["company.email"] as string}
+                onChange={(e) => set("company.email", e.target.value)} placeholder="operaciones@empresa.mx" error={errors["company.email"]} />
+              <p className="text-xs text-[var(--color-muted-foreground)]"><span className="font-medium">Aparece en:</span> el pie de la cotización.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input id="companyWebsite" label="Sitio web" value={form["company.website"] as string}
+                onChange={(e) => set("company.website", e.target.value)} placeholder="www.empresa.mx" />
+              <p className="text-xs text-[var(--color-muted-foreground)]"><span className="font-medium">Aparece en:</span> el pie de la cotización.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input id="companyAddress" label="Domicilio comercial" value={form["company.address"] as string}
+                onChange={(e) => set("company.address", e.target.value)} placeholder="Av. Ejemplo 123, Col. Centro, Manzanillo, Col." />
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                <span className="font-medium">Aparece en:</span> el membrete de la cotización. Dirección visible — NO es el CP fiscal del CFDI.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

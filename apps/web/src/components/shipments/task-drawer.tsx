@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { processApi, type ProcessTask } from "@/api/process"
+import { validateDateField, findIncompleteDateInputs, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const TASK_STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
@@ -40,6 +41,7 @@ export function TaskDrawer({
   })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -62,6 +64,24 @@ export function TaskDrawer({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    const originalPlanned = toLocalInput(task.plannedAt)
+    const errs = collectErrors({
+      // La fecha planeada es a futuro; si ya existía una pasada y no se cambió, no se exige corregir.
+      plannedAt: form.plannedAt && form.plannedAt !== originalPlanned
+        ? validateDateField(form.plannedAt, { notPast: true, label: "La fecha planeada" })
+        : undefined,
+      // La fecha real (de realización) ya ocurrió: no puede ser futura.
+      actualAt: validateDateField(form.actualAt, { notFuture: true, label: "La fecha real" }),
+    })
+    for (const inc of findIncompleteDateInputs(document.getElementById("task-form") ?? document)) {
+      errs[inc.id] = inc.message
+    }
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      scrollToFirstError()
+      return
+    }
+    setErrors({})
     saveMutation.mutate()
   }
 
@@ -102,14 +122,14 @@ export function TaskDrawer({
         {/* Recolección/entrega: la fecha real es la del TRAMO (fuente única). La planeada
             vive en el tramo, por eso aquí no se muestra. */}
         {!isExecutionTask && (
-          <Input id="plannedAt" label="Fecha planeada" type="datetime-local" value={form.plannedAt} onChange={set("plannedAt")} />
+          <Input id="plannedAt" label="Fecha planeada" type="datetime-local" value={form.plannedAt} onChange={set("plannedAt")} error={errors.plannedAt} />
         )}
         <Input
           id="actualAt"
           label={isExecutionTask
             ? (task.code === "recoleccion" ? "Fecha real de recolección" : "Fecha real de entrega")
             : (task.isMilestone ? "Fecha real del hito" : "Fecha de realización")}
-          type="datetime-local" value={form.actualAt} onChange={set("actualAt")}
+          type="datetime-local" value={form.actualAt} onChange={set("actualAt")} error={errors.actualAt}
         />
         <p className="-mt-2 text-xs text-[var(--color-muted-foreground)]">
           {isExecutionTask

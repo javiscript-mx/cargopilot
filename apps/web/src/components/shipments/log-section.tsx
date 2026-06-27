@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm"
 import { useCatalog } from "@/hooks/use-catalog"
 import { shipmentsApi, type ShipmentEvent } from "@/api/shipments"
+import { validateDateField, findIncompleteDateInputs } from "@/lib/validators"
 
 const EVENT_ICONS: Record<ShipmentEvent["type"], typeof Flag> = {
   status_change: ArrowRightLeft,
@@ -71,6 +72,12 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
     const errs: Record<string, string> = {}
     if (form.kind === "milestone" && !form.milestone) errs.milestone = "Selecciona un hito"
     if (form.kind === "note" && form.title.trim().length < 2) errs.title = "Escribe un título para la nota"
+    // El suceso ya ocurrió: no puede registrarse en el futuro.
+    const occErr = validateDateField(form.occurredAt, { notFuture: true, label: "La fecha del suceso" })
+    if (occErr) errs.eventDate = occErr
+    for (const inc of findIncompleteDateInputs(document.getElementById("log-event-form") ?? document)) {
+      errs[inc.id] = inc.message
+    }
     if (Object.keys(errs).length) {
       setErrors(errs)
       toast.error("Revisa los campos marcados", "Hay datos por corregir antes de registrar.")
@@ -92,7 +99,7 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
       </CardHeader>
       <CardContent>
         {showForm && (
-          <form onSubmit={handleAdd} className="mb-5 flex flex-col gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+          <form id="log-event-form" onSubmit={handleAdd} className="mb-5 flex flex-col gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
             <div className="flex gap-2">
               {(["milestone", "note"] as const).map((kind) => (
                 <button key={kind} type="button" onClick={() => setForm((f) => ({ ...f, kind }))}
@@ -111,7 +118,7 @@ export function LogSection({ shipmentId, canEdit, canDelete }: { shipmentId: str
             <Input id="eventDetail" label="Detalle (opcional)" placeholder="Información adicional, referencias..." value={form.detail}
               onChange={(e) => setForm((f) => ({ ...f, detail: e.target.value }))} />
             <Input id="eventDate" label="Fecha y hora del suceso (vacío = ahora)" type="datetime-local" value={form.occurredAt}
-              onChange={(e) => setForm((f) => ({ ...f, occurredAt: e.target.value }))} />
+              onChange={(e) => setForm((f) => ({ ...f, occurredAt: e.target.value }))} error={errors.eventDate} />
             <div className="flex gap-2">
               <Button type="submit" size="sm" loading={addMutation.isPending}>Registrar</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => { setShowForm(false); setErrors({}) }}>Cancelar</Button>

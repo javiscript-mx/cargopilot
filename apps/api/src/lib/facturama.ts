@@ -79,7 +79,9 @@ export async function createCFDI(payload: FacturамаCFDIPayload) {
 }
 
 export async function cancelCFDI(cfdiId: string, motive: string = "02") {
-  return facturamaFetch(`/api/cfdis/${cfdiId}?type=issued&motive=${motive}`, {
+  // El recurso es "Cfdi" (singular), igual que PDF/XML; "cfdis" (plural) da 404
+  // ("no controller named 'cfdis'"). Ver nota en getCFDIPdf.
+  return facturamaFetch(`/api/Cfdi/${cfdiId}?type=issued&motive=${motive}`, {
     method: "DELETE",
   })
 }

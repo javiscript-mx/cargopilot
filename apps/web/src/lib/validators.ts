@@ -65,6 +65,47 @@ export function validateUnits(units: string): string | undefined {
   return undefined
 }
 
+// Matrícula de contenedor (ISO 6346): 4 letras + 6 dígitos + 1 verificador. El número
+// identifica al contenedor (dueño + serie); NO codifica tamaño/tipo (eso es otro código
+// ISO aparte, p. ej. 22G1). Lo verificable es el dígito de control: letras→valores 10-38
+// (saltando múltiplos de 11), pesos 2^posición, suma mod 11 (resultado 10 ⇒ 0).
+const ISO6346_LETTER: Record<string, number> = (() => {
+  const map: Record<string, number> = {}
+  let val = 10
+  for (let i = 0; i < 26; i++) {
+    if (val % 11 === 0) val++ // se omiten 11, 22, 33
+    map[String.fromCharCode(65 + i)] = val
+    val++
+  }
+  return map
+})()
+
+function iso6346CheckDigit(first10: string): number {
+  let sum = 0
+  for (let p = 0; p < 10; p++) {
+    const ch = first10[p]!
+    const value = p < 4 ? (ISO6346_LETTER[ch] ?? 0) : Number(ch)
+    sum += value * (1 << p) // 2^p
+  }
+  const cd = sum % 11
+  return cd === 10 ? 0 : cd
+}
+
+/**
+ * Valida una matrícula de contenedor ISO 6346 (4 letras + 7 dígitos, 4ª letra U/J/Z y
+ * dígito verificador correcto). Detecta matrículas mal tecleadas. Devuelve un mensaje o
+ * undefined. Vacío = sin opinión (campo opcional). Pensado como aviso, no como candado.
+ */
+export function validateContainerNumber(num: string): string | undefined {
+  const v = num.trim().toUpperCase()
+  if (!v) return undefined
+  if (!/^[A-Z]{4}\d{7}$/.test(v)) return "Formato ISO 6346: 4 letras + 7 dígitos (p. ej. MSKU1234565)."
+  if (!"UJZ".includes(v[3]!)) return "La 4ª letra debería ser U, J o Z (categoría de equipo ISO 6346)."
+  const expected = iso6346CheckDigit(v.slice(0, 10))
+  if (expected !== Number(v[10])) return `El dígito verificador ISO 6346 no cuadra (esperado ${expected}). Revisa la matrícula.`
+  return undefined
+}
+
 /** Cantidad de un concepto de factura. */
 export function validateQuantity(qty: string): string | undefined {
   const n = parseFloat(qty)
@@ -114,6 +155,70 @@ export function validateGcsBucket(name: string): string | undefined {
     return "Nombre inválido — minúsculas, números, guiones y puntos (3-63 caracteres)"
   }
   return undefined
+}
+
+// ── Fechas y horas ───────────────────────────────────────────────────────────
+// Trabajan con el string LOCAL de <input type="date"|"datetime-local"> (no ISO).
+// Las cadenas "YYYY-MM-DD[THH:mm]" ordenan cronológicamente como texto, así que
+// comparamos contra el "ahora" en el mismo formato.
+
+/** "YYYY-MM-DDTHH:mm" del momento actual en hora local (para min/compare de datetime-local). */
+export function nowLocal(): string {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
+/** "YYYY-MM-DD" de hoy en hora local (para min/compare de date). */
+export function todayLocal(): string {
+  return nowLocal().slice(0, 10)
+}
+
+export interface DateFieldOpts {
+  required?: boolean
+  notPast?: boolean    // rechaza fechas/horas anteriores a ahora (ETA, planeadas, vigencia)
+  notFuture?: boolean  // rechaza fechas/horas posteriores a ahora (real ocurrido, pago, gasto)
+  minLocal?: string    // cota inferior explícita, mismo formato que value (p. ej. cruce de campos)
+  maxLocal?: string    // cota superior explícita
+  minMessage?: string  // mensaje propio cuando value < minLocal
+  label?: string       // sujeto del mensaje, p. ej. "La entrega (ETA)"
+}
+
+/**
+ * Valida un valor de <input type="date"|"datetime-local"> (string local, no ISO).
+ * Devuelve un mensaje en español o undefined.
+ * OJO: NO detecta el caso "a medio llenar" (p. ej. AM/PM faltante) — ahí el navegador
+ * deja value="" y se ve igual que vacío. Ese caso lo cubre findIncompleteDateInputs.
+ */
+export function validateDateField(value: string, opts: DateFieldOpts = {}): string | undefined {
+  const { required = false, notPast, notFuture, minLocal, maxLocal, minMessage, label = "La fecha" } = opts
+  const v = value.trim()
+  if (!v) return required ? "Requerido" : undefined
+  const now = v.includes("T") ? nowLocal() : todayLocal()
+  if (notPast && v < now) return `${label} no puede ser en el pasado.`
+  if (notFuture && v > now) return `${label} no puede ser en el futuro.`
+  if (minLocal && v < minLocal) return minMessage ?? `${label} es anterior a la fecha mínima permitida.`
+  if (maxLocal && v > maxLocal) return `${label} es posterior a la fecha máxima permitida.`
+  return undefined
+}
+
+/**
+ * Inputs de fecha/hora a medio llenar: el navegador deja value="" pero marca
+ * validity.badInput=true (p. ej. datetime-local sin AM/PM, o una fecha incompleta).
+ * Devuelve {id, message} de cada uno para marcarlos como error en el submit en vez de
+ * tratarlos como vacíos — que es justo lo que confunde al usuario.
+ * Acota `root` al <form> para no leer inputs de otros formularios montados detrás.
+ */
+export function findIncompleteDateInputs(root: ParentNode = document): { id: string; message: string }[] {
+  const out: { id: string; message: string }[] = []
+  const inputs = root.querySelectorAll<HTMLInputElement>(
+    'input[type="datetime-local"], input[type="date"], input[type="time"]',
+  )
+  inputs.forEach((el) => {
+    if (el.validity.badInput && el.id) {
+      out.push({ id: el.id, message: el.type === "date" ? "Fecha incompleta" : "Hora incompleta — revisa AM/PM" })
+    }
+  })
+  return out
 }
 
 /** Quita las llaves con valor undefined — deja solo errores reales. */

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Pencil, Trash2, Container as ContainerIcon } from "lucide-react"
+import { Plus, Pencil, Trash2, Container as ContainerIcon, AlertTriangle } from "lucide-react"
 import { Drawer } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -9,7 +9,7 @@ import { containersApi, type Container } from "@/api/containers"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm"
-import { validateRequired, collectErrors, scrollToFirstError } from "@/lib/validators"
+import { validateRequired, validateContainerNumber, collectErrors, scrollToFirstError } from "@/lib/validators"
 
 const EMPTY = { number: "", type: "", seal: "", tare: "", notes: "" }
 
@@ -77,6 +77,9 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
   }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
+  // Aviso ISO 6346 (no bloqueante): solo cuando la matrícula ya tiene largo completo,
+  // para no molestar mientras se teclea.
+  const numberWarn = form.number.trim().length >= 11 ? validateContainerNumber(form.number) : undefined
 
   return (
     <div>
@@ -108,7 +111,13 @@ export function ContainersBlock({ shipmentId, canEdit }: { shipmentId: string; c
           }
         >
           <form id="container-form" onSubmit={handleSave} className="flex flex-col gap-3">
-            <Input id="number" label="Número / matrícula" value={form.number} onChange={set("number")} placeholder="MSKU1234567" error={errors.number} />
+            <Input id="number" label="Número / matrícula" value={form.number} onChange={set("number")} placeholder="MSKU1234565" error={errors.number} />
+            {!errors.number && numberWarn && (
+              <p className="-mt-1 flex items-start gap-1.5 text-xs text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{numberWarn}</span>
+              </p>
+            )}
             <Select id="type" label="Tipo de contenedor" placeholder="Selecciona..." options={typeOptions} value={form.type} onChange={set("type")} />
             <div className="grid grid-cols-2 gap-3">
               <Input id="seal" label="Sello / precinto" value={form.seal} onChange={set("seal")} />

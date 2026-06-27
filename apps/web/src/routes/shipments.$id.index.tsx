@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Package, Pencil, LayoutGrid, Route as RouteIcon, Truck, Boxes, Receipt, FileText, History } from "lucide-react"
+import { ArrowLeft, Package, Pencil, LayoutGrid, Route as RouteIcon, Truck, Boxes, Receipt, FileText, History, Info, FileDown } from "lucide-react"
 import { AppLayout } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -171,7 +171,27 @@ function ShipmentDetailPage() {
               {tab === "transporte" && <ProcessSection shipmentId={id} locked={cancelled} view="transport" bare onGoToTab={setTab} />}
               {tab === "carga" && <CargoSection shipmentId={id} cargoType={shipment.cargoType} canEdit={canEdit} bare />}
               {tab === "fiscal" && <FiscalSection shipmentId={id} />}
-              {tab === "evidencias" && <DocumentsSection entityType="shipment" entityId={id} readOnly={!canWriteDocuments} bare />}
+              {tab === "evidencias" && (
+                <DocumentsSection
+                  entityType="shipment" entityId={id} readOnly={!canWriteDocuments} bare
+                  intro={
+                    <div className="flex flex-col gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 px-3 py-2">
+                      <div className="flex items-start gap-2 text-xs text-[var(--color-muted-foreground)]">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
+                        <span>
+                          Documentos y comprobantes de la operación: <span className="font-medium text-[var(--color-foreground)]">POD/acuse de entrega, fotos de la carga, cartas de instrucción</span>. La cotización y las facturas se gestionan en <span className="font-medium text-[var(--color-foreground)]">Fiscal</span>; los comprobantes de gasto, en <span className="font-medium text-[var(--color-foreground)]">Fiscal → Compras</span>. El POD se requiere para cerrar el expediente.
+                        </span>
+                      </div>
+                      {canWriteDocuments && (
+                        <Button type="button" size="sm" variant="outline" className="self-start"
+                          onClick={() => window.open(shipmentsApi.podUrl(id), "_blank", "noopener")}>
+                          <FileDown className="h-3.5 w-3.5" /> Generar formato POD (para firmar)
+                        </Button>
+                      )}
+                    </div>
+                  }
+                />
+              )}
               {tab === "bitacora" && <LogSection shipmentId={id} canEdit={canEdit} canDelete={canDelete} />}
             </div>
           </Card>

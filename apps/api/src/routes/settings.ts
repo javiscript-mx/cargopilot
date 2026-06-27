@@ -18,6 +18,11 @@ export const SETTING_DEFAULTS: Record<string, unknown> = {
   "appearance.primaryColor": "#284a70",
   "appearance.accentColor": "#f49c2f",
   "appearance.menuColor": "#111d2d",
+  // Contacto comercial de la empresa (membretes/POD que ve el cliente; ≠ datos fiscales del CFDI)
+  "company.phone": "",
+  "company.email": "",
+  "company.website": "",
+  "company.address": "",
 }
 
 const PatchSettingsSchema = z.record(z.string(), z.unknown())

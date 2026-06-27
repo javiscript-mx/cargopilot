@@ -87,6 +87,8 @@ export const shipmentsApi = {
   readiness: (id: string) => apiClient.get<ShipmentReadiness>(`/shipments/${id}/readiness`),
   listPaged: (params: PageParams) => apiClient.getPaged<Shipment>(`/shipments?${pageQuery(params)}`),
   get: (id: string) => apiClient.get<Shipment>(`/shipments/${id}`),
+  // URL del PDF del POD ("soporte de entrega en planta"); se abre en pestaña nueva (cookie de sesión)
+  podUrl: (id: string) => `/api/shipments/${id}/pod/pdf`,
   create: (data: ShipmentInput) => apiClient.post<Shipment>("/shipments", data),
   update: (id: string, data: Partial<ShipmentInput>) =>
     apiClient.put<Shipment>(`/shipments/${id}`, data),

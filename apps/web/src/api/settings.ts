@@ -16,6 +16,10 @@ export interface AppSettings {
   "appearance.menuColor": string
   "branding.systemName": string
   "branding.logoDataUrl": string
+  "company.phone": string
+  "company.email": string
+  "company.website": string
+  "company.address": string
   [key: string]: unknown // incluye modules.<key> = "true" | "false"
 }
 

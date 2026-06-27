@@ -21,7 +21,7 @@ import { expensesApi, EXPENSE_STATUS, PAYMENT_METHODS, type ExpenseStatus, type 
 import { suppliersApi } from "@/api/suppliers"
 import { shipmentsApi } from "@/api/shipments"
 import { documentsApi } from "@/api/documents"
-import { collectErrors, validateRequired, validateQuantity, scrollToFirstError } from "@/lib/validators"
+import { collectErrors, validateRequired, validateQuantity, validateDateField, findIncompleteDateInputs, scrollToFirstError } from "@/lib/validators"
 
 const num = (s?: string | null) => parseFloat(s ?? "0") || 0
 // Días hasta el vencimiento (negativo = vencido). null si no hay fecha.
@@ -106,9 +106,11 @@ function PurchasesPage() {
   // ── Registro de pago (total o parcial) ──
   const [paying, setPaying] = useState<ExpenseWithShipment | null>(null)
   const [payForm, setPayForm] = useState({ amount: "", method: "transferencia" as PaymentMethod, reference: "", paidAt: "" })
+  const [payErrors, setPayErrors] = useState<Record<string, string>>({})
   function openPay(e: ExpenseWithShipment) {
     const remaining = num(e.amount) - num(e.paidAmount)
     setPayForm({ amount: remaining.toFixed(2), method: "transferencia", reference: "", paidAt: new Date().toISOString().slice(0, 10) })
+    setPayErrors({})
     setPaying(e)
   }
   const payM = useMutation({
@@ -121,6 +123,14 @@ function PurchasesPage() {
     onSuccess: () => { invalidate(); setPaying(null); toast.success("Pago registrado") },
     onError,
   })
+  // La fecha de pago no puede ser futura (un pago registrado ya ocurrió).
+  function handlePay(ev: React.FormEvent) {
+    ev.preventDefault()
+    const errs = collectErrors({ "pay-date": validateDateField(payForm.paidAt, { notFuture: true, label: "La fecha de pago" }) })
+    for (const inc of findIncompleteDateInputs(document.getElementById("pay-form") ?? document)) errs[inc.id] = inc.message
+    if (Object.keys(errs).length) { setPayErrors(errs); scrollToFirstError(); return }
+    setPayErrors({}); payM.mutate()
+  }
 
   // ── Registrar gasto (orden de compra) desde Compras: ligado a un expediente o general ──
   const NEW_EXPENSE = { category: "flete", concept: "", amount: "", currency: "MXN", supplierId: "", shipmentId: "", expenseDate: "", reference: "", notes: "" }
@@ -148,7 +158,12 @@ function PurchasesPage() {
   })
   function handleCreate(ev: React.FormEvent) {
     ev.preventDefault()
-    const errs = collectErrors({ concept: validateRequired(form.concept, "Concepto"), amount: validateQuantity(form.amount) })
+    const errs = collectErrors({
+      concept: validateRequired(form.concept, "Concepto"),
+      amount: validateQuantity(form.amount),
+      expenseDate: validateDateField(form.expenseDate, { notFuture: true, label: "La fecha del gasto" }),
+    })
+    for (const inc of findIncompleteDateInputs(document.getElementById("new-expense-form") ?? document)) errs[inc.id] = inc.message
     if (Object.keys(errs).length) { setErrors(errs); toast.error("Revisa los campos marcados", "Hay datos por corregir."); scrollToFirstError(); return }
     setErrors({}); createM.mutate()
   }
@@ -310,7 +325,7 @@ function PurchasesPage() {
           <Select id="shipmentId" label="Expediente (opcional)" placeholder="General (sin expediente)" value={form.shipmentId} onChange={setF("shipmentId")}
             options={shipments.map((s) => ({ value: s.id, label: `${s.folio} · ${s.customer?.name ?? ""}` }))} />
           <div className="grid grid-cols-2 gap-3">
-            <Input id="expenseDate" type="date" label="Fecha del gasto" value={form.expenseDate} onChange={setF("expenseDate")} />
+            <Input id="expenseDate" type="date" label="Fecha del gasto" value={form.expenseDate} onChange={setF("expenseDate")} error={errors.expenseDate} />
             <Input id="reference" label="Folio de factura (evidencia)" value={form.reference} onChange={setF("reference")} placeholder="FAC-001" />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -325,7 +340,7 @@ function PurchasesPage() {
       {/* Registrar pago (total o parcial) */}
       {paying && (
         <Dialog open onClose={() => setPaying(null)} title={`Registrar pago — ${paying.concept}`} className="max-w-md">
-          <form onSubmit={(ev) => { ev.preventDefault(); payM.mutate() }} className="flex flex-col gap-4">
+          <form id="pay-form" onSubmit={handlePay} className="flex flex-col gap-4">
             <div className="rounded-md bg-[var(--color-muted)] p-3 text-sm">
               <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Monto del gasto</span><span>{money(num(paying.amount), paying.currency)}</span></div>
               <div className="flex justify-between text-[var(--color-muted-foreground)]"><span>Pagado</span><span>{money(num(paying.paidAmount), paying.currency)}</span></div>
@@ -334,7 +349,7 @@ function PurchasesPage() {
             <MoneyInput label="Monto del pago" currency={paying.currency} value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Select id="pay-method" label="Método" options={PAYMENT_METHODS} value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} />
-              <Input id="pay-date" type="date" label="Fecha de pago" value={payForm.paidAt} onChange={(e) => setPayForm((f) => ({ ...f, paidAt: e.target.value }))} />
+              <Input id="pay-date" type="date" label="Fecha de pago" value={payForm.paidAt} onChange={(e) => setPayForm((f) => ({ ...f, paidAt: e.target.value }))} error={payErrors["pay-date"]} />
             </div>
             <Input id="pay-ref" label="Referencia (opcional)" placeholder="SPEI / folio / cheque" value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))} />
             <div className="flex justify-end gap-2">

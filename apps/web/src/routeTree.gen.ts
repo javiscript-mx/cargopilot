@@ -35,6 +35,7 @@ import { Route as InvoicesIdRouteImport } from './routes/invoices.$id'
 import { Route as ExpensesIdRouteImport } from './routes/expenses.$id'
 import { Route as CustomersNewRouteImport } from './routes/customers.new'
 import { Route as CustomersIdRouteImport } from './routes/customers.$id'
+import { Route as SuppliersIdIndexRouteImport } from './routes/suppliers.$id.index'
 import { Route as ShipmentsIdIndexRouteImport } from './routes/shipments.$id.index'
 import { Route as CustomersIdIndexRouteImport } from './routes/customers.$id.index'
 import { Route as SuppliersIdEditRouteImport } from './routes/suppliers.$id.edit'
@@ -171,6 +172,11 @@ const CustomersIdRoute = CustomersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => CustomersRoute,
 } as any)
+const SuppliersIdIndexRoute = SuppliersIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuppliersIdRoute,
+} as any)
 const ShipmentsIdIndexRoute = ShipmentsIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/suppliers/$id/edit': typeof SuppliersIdEditRoute
   '/customers/$id/': typeof CustomersIdIndexRoute
   '/shipments/$id/': typeof ShipmentsIdIndexRoute
+  '/suppliers/$id/': typeof SuppliersIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -245,7 +252,6 @@ export interface FileRoutesByTo {
   '/invoices/$id': typeof InvoicesIdRoute
   '/invoices/new': typeof InvoicesNewRoute
   '/shipments/new': typeof ShipmentsNewRoute
-  '/suppliers/$id': typeof SuppliersIdRouteWithChildren
   '/suppliers/new': typeof SuppliersNewRoute
   '/customers': typeof CustomersIndexRoute
   '/invoices': typeof InvoicesIndexRoute
@@ -256,6 +262,7 @@ export interface FileRoutesByTo {
   '/suppliers/$id/edit': typeof SuppliersIdEditRoute
   '/customers/$id': typeof CustomersIdIndexRoute
   '/shipments/$id': typeof ShipmentsIdIndexRoute
+  '/suppliers/$id': typeof SuppliersIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -290,6 +297,7 @@ export interface FileRoutesById {
   '/suppliers/$id/edit': typeof SuppliersIdEditRoute
   '/customers/$id/': typeof CustomersIdIndexRoute
   '/shipments/$id/': typeof ShipmentsIdIndexRoute
+  '/suppliers/$id/': typeof SuppliersIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -325,6 +333,7 @@ export interface FileRouteTypes {
     | '/suppliers/$id/edit'
     | '/customers/$id/'
     | '/shipments/$id/'
+    | '/suppliers/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -341,7 +350,6 @@ export interface FileRouteTypes {
     | '/invoices/$id'
     | '/invoices/new'
     | '/shipments/new'
-    | '/suppliers/$id'
     | '/suppliers/new'
     | '/customers'
     | '/invoices'
@@ -352,6 +360,7 @@ export interface FileRouteTypes {
     | '/suppliers/$id/edit'
     | '/customers/$id'
     | '/shipments/$id'
+    | '/suppliers/$id'
   id:
     | '__root__'
     | '/'
@@ -385,6 +394,7 @@ export interface FileRouteTypes {
     | '/suppliers/$id/edit'
     | '/customers/$id/'
     | '/shipments/$id/'
+    | '/suppliers/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -588,6 +598,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersIdRouteImport
       parentRoute: typeof CustomersRoute
     }
+    '/suppliers/$id/': {
+      id: '/suppliers/$id/'
+      path: '/'
+      fullPath: '/suppliers/$id/'
+      preLoaderRoute: typeof SuppliersIdIndexRouteImport
+      parentRoute: typeof SuppliersIdRoute
+    }
     '/shipments/$id/': {
       id: '/shipments/$id/'
       path: '/'
@@ -704,10 +721,12 @@ const ShipmentsRouteWithChildren = ShipmentsRoute._addFileChildren(
 
 interface SuppliersIdRouteChildren {
   SuppliersIdEditRoute: typeof SuppliersIdEditRoute
+  SuppliersIdIndexRoute: typeof SuppliersIdIndexRoute
 }
 
 const SuppliersIdRouteChildren: SuppliersIdRouteChildren = {
   SuppliersIdEditRoute: SuppliersIdEditRoute,
+  SuppliersIdIndexRoute: SuppliersIdIndexRoute,
 }
 
 const SuppliersIdRouteWithChildren = SuppliersIdRoute._addFileChildren(

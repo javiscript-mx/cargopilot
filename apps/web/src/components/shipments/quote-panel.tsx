@@ -1,12 +1,13 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Trash2, History, Pencil } from "lucide-react"
+import { Plus, Trash2, History, Pencil, FileDown, Check, X, Send, RotateCcw } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MoneyInput } from "@/components/ui/money-input"
 import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm"
 import { useCan } from "@/lib/permissions"
 import { useCatalog } from "@/hooks/use-catalog"
 import { personaFromRfc } from "@/lib/fiscal"
@@ -14,8 +15,7 @@ import { computeTaxes } from "@/lib/taxes"
 import { shipmentsApi } from "@/api/shipments"
 import { invoicesApi } from "@/api/invoices"
 import { quotesApi, type QuoteItem, type QuoteStatus } from "@/api/quotes"
-
-const today = () => new Date().toISOString().slice(0, 10)
+import { validateDateField, todayLocal } from "@/lib/validators"
 
 const STATUS_OPTIONS: { value: QuoteStatus; label: string }[] = [
   { value: "draft", label: "Borrador" },
@@ -26,6 +26,9 @@ const STATUS_OPTIONS: { value: QuoteStatus; label: string }[] = [
 const STATUS_VARIANT: Record<QuoteStatus, "outline" | "default" | "success" | "destructive"> = {
   draft: "outline", sent: "default", accepted: "success", rejected: "destructive",
 }
+const TRANSITION_TOAST: Record<QuoteStatus, string> = {
+  draft: "Tarifa reabierta", sent: "Tarifa marcada como enviada", accepted: "Tarifa aprobada", rejected: "Tarifa rechazada",
+}
 const FALLBACK_CURRENCY = [{ value: "MXN", label: "MXN" }, { value: "USD", label: "USD" }]
 
 const toDateInput = (iso: string | null): string => (iso ? iso.slice(0, 10) : "")
@@ -35,8 +38,11 @@ const toDateInput = (iso: string | null): string => (iso ? iso.slice(0, 10) : ""
 export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmentId: string; currency?: string }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const { can } = useCan()
   const canEdit = can("shipments.write")
+  // Para el mensaje de "regresó a Enviada" tras editar una tarifa aceptada (regla de re-aprobación).
+  const reverted = useRef(false)
   const { options: catalogCurrency } = useCatalog("currency")
   const currencyOptions = catalogCurrency.length ? catalogCurrency : FALLBACK_CURRENCY
   // Claves prodserv curadas de forwarding (mismas que usa la factura) → liga cotizado ↔ facturado
@@ -54,17 +60,17 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
   const { data: revisions = [] } = useQuery({ queryKey: ["quote-revisions", shipmentId], queryFn: () => quotesApi.revisions(shipmentId) })
 
   const [form, setForm] = useState<{
-    status: QuoteStatus; currency: string; validUntil: string; notes: string; items: QuoteItem[]
+    currency: string; validUntil: string; notes: string; items: QuoteItem[]
   } | null>(null)
 
   // Inicializa el form una vez resuelta la query (o con defaults si no hay cotización)
   const [initialized, setInitialized] = useState(false)
   // null = automático (compacto si ya hay tarifa); true/false = el usuario forzó editar/cerrar
   const [editOverride, setEditOverride] = useState<boolean | null>(null)
+  const [validErr, setValidErr] = useState<string | undefined>(undefined)
   if (!isLoading && !initialized) {
     setInitialized(true)
     setForm({
-      status: quote?.status ?? "draft",
       currency: quote?.currency ?? shipmentCurrency ?? "MXN",
       validUntil: toDateInput(quote?.validUntil ?? null),
       notes: quote?.notes ?? "",
@@ -77,8 +83,10 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
       const f = form!
       // El costo a nivel cotización = suma de costos por servicio (compatibilidad con resumen/readiness)
       const totalCost = f.items.reduce((a, i) => a + (Number(i.estimatedCost) || 0), 0)
+      // Regla de re-aprobación (a): editar los cargos de una tarifa ACEPTADA la regresa a
+      // "Enviada" y exige re-aprobarla. En cualquier otro estado el status no se toca.
+      reverted.current = quote?.status === "accepted"
       return quotesApi.save(shipmentId, {
-        status: f.status,
         currency: f.currency,
         validUntil: f.validUntil ? new Date(f.validUntil).toISOString() : null,
         estimatedCost: totalCost || null,
@@ -89,15 +97,29 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
           ...(i.productKey ? { productKey: i.productKey } : {}),
           ...(i.estimatedCost ? { estimatedCost: Number(i.estimatedCost) } : {}),
         })),
+        ...(reverted.current ? { status: "sent" as QuoteStatus } : {}),
       })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quote", shipmentId] })
       queryClient.invalidateQueries({ queryKey: ["quote-revisions", shipmentId] })
       queryClient.invalidateQueries({ queryKey: ["readiness", shipmentId] })
-      toast.success("Cotización guardada")
+      if (reverted.current) toast.success("Tarifa guardada — regresó a 'Enviada', vuelve a aprobarla")
+      else toast.success("Cotización guardada")
     },
     onError: (err: Error) => toast.error("No se pudo guardar la cotización", err.message),
+  })
+
+  // Transición de estado del ciclo de la tarifa — acción explícita, separada de editar los cargos.
+  const transition = useMutation({
+    mutationFn: (status: QuoteStatus) => quotesApi.save(shipmentId, { status }),
+    onSuccess: (_data, status) => {
+      queryClient.invalidateQueries({ queryKey: ["quote", shipmentId] })
+      queryClient.invalidateQueries({ queryKey: ["quote-revisions", shipmentId] })
+      queryClient.invalidateQueries({ queryKey: ["readiness", shipmentId] })
+      toast.success(TRANSITION_TOAST[status])
+    },
+    onError: (err: Error) => toast.error("No se pudo actualizar el estado", err.message),
   })
 
   if (isLoading || !form) {
@@ -123,13 +145,23 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
   // Vista compacta por defecto cuando ya hay tarifa guardada; se expande al editar.
   const savedHasCharges = (quote?.items ?? []).some((i) => Number(i.amount) > 0)
   const isEditing = editOverride ?? !savedHasCharges
+  // Estado del CICLO de la tarifa (lo guardado, no el form de edición de cargos).
+  const savedStatus: QuoteStatus = quote?.status ?? "draft"
+  const acceptedRev = revisions.find((r) => r.status === "accepted")
+  const acceptedAt = savedStatus === "accepted" && acceptedRev ? new Date(acceptedRev.createdAt) : null
+  const busy = transition.isPending
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Cotización / tarifa</h4>
         <div className="flex items-center gap-2">
-          <Badge variant={STATUS_VARIANT[form.status]}>{STATUS_OPTIONS.find((s) => s.value === form.status)?.label}</Badge>
+          {savedHasCharges && !isEditing && (
+            <Button type="button" size="sm" variant="outline" title="Descargar cotización en PDF"
+              onClick={() => window.open(quotesApi.pdfUrl(shipmentId), "_blank", "noopener")}>
+              <FileDown className="h-3 w-3" /> PDF
+            </Button>
+          )}
           {canEdit && (
             isEditing
               ? (savedHasCharges && <Button type="button" size="sm" variant="outline" onClick={() => setEditOverride(false)}>Listo</Button>)
@@ -138,11 +170,54 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
         </div>
       </div>
 
+      {/* Barra de estado / aprobación — el ciclo de la tarifa como acciones explícitas
+          (aprobar NO requiere editar). */}
+      {savedHasCharges && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Badge variant={STATUS_VARIANT[savedStatus]}>{STATUS_OPTIONS.find((s) => s.value === savedStatus)?.label}</Badge>
+            {acceptedAt && (
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                Aceptada el {acceptedAt.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+              </span>
+            )}
+          </div>
+          {canEdit && !isEditing && (
+            <div className="flex items-center gap-2">
+              {savedStatus === "draft" && (
+                <Button type="button" size="sm" variant="outline" loading={busy} onClick={() => transition.mutate("sent")}>
+                  <Send className="h-3 w-3" /> Marcar como enviada
+                </Button>
+              )}
+              {savedStatus === "sent" && (<>
+                <Button type="button" size="sm" variant="outline" loading={busy}
+                  onClick={async () => { if (await confirm({ title: "Rechazar tarifa", description: "La tarifa quedará marcada como rechazada. Podrás reabrirla después.", destructive: true, confirmLabel: "Rechazar" })) transition.mutate("rejected") }}>
+                  <X className="h-3 w-3" /> Rechazar
+                </Button>
+                <Button type="button" size="sm" loading={busy}
+                  onClick={async () => { if (await confirm({ title: "Aprobar tarifa", description: `Confirmas que el cliente aceptó la tarifa por ${money(tax.total)}. Esto autoriza continuar con el servicio.`, confirmLabel: "Aprobar tarifa" })) transition.mutate("accepted") }}>
+                  <Check className="h-3 w-3" /> Aprobar tarifa
+                </Button>
+              </>)}
+              {savedStatus === "accepted" && (
+                <Button type="button" size="sm" variant="outline" loading={busy} onClick={() => transition.mutate("sent")}>
+                  <RotateCcw className="h-3 w-3" /> Reabrir
+                </Button>
+              )}
+              {savedStatus === "rejected" && (
+                <Button type="button" size="sm" variant="outline" loading={busy} onClick={() => transition.mutate("draft")}>
+                  <RotateCcw className="h-3 w-3" /> Reabrir
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {isEditing && (<>
-      <div className="grid grid-cols-3 gap-3">
-        <Select id="q-status" label="Estado" options={STATUS_OPTIONS} value={form.status} onChange={(e) => setForm((f) => f && { ...f, status: e.target.value as QuoteStatus })} disabled={!canEdit} />
+      <div className="grid grid-cols-2 gap-3">
         <Select id="q-currency" label="Moneda" options={currencyOptions} value={form.currency} onChange={(e) => setForm((f) => f && { ...f, currency: e.target.value })} disabled={!canEdit} />
-        <Input id="q-valid" label="Vigencia" type="date" min={today()} value={form.validUntil} onChange={(e) => setForm((f) => f && { ...f, validUntil: e.target.value })} disabled={!canEdit} />
+        <Input id="q-valid" label="Vigencia" type="date" min={todayLocal()} value={form.validUntil} onChange={(e) => { setValidErr(undefined); setForm((f) => f && { ...f, validUntil: e.target.value }) }} disabled={!canEdit} error={validErr} />
       </div>
 
       {/* Cargos al cliente */}
@@ -256,10 +331,13 @@ export function QuotePanel({ shipmentId, currency: shipmentCurrency }: { shipmen
         {canEdit && (
           <div className="flex justify-end">
             <Button type="button" size="sm" loading={save.isPending} onClick={() => {
-              if (form.validUntil && form.validUntil < today()) {
-                toast.error("Vigencia inválida", "La vigencia de la tarifa no puede ser una fecha pasada.")
+              const err = validateDateField(form.validUntil, { notPast: true, label: "La vigencia" })
+              if (err) {
+                setValidErr(err)
+                toast.error("Vigencia inválida", err)
                 return
               }
+              setValidErr(undefined)
               save.mutate()
               setEditOverride(false)
             }}>Guardar cotización</Button>

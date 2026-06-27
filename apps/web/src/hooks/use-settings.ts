@@ -17,6 +17,10 @@ export const SETTINGS_DEFAULTS: AppSettings = {
   "appearance.menuColor": "#111d2d",
   "branding.systemName": "HM Sistema",
   "branding.logoDataUrl": "/logo.png",
+  "company.phone": "",
+  "company.email": "",
+  "company.website": "",
+  "company.address": "",
 }
 
 export function useSettings() {

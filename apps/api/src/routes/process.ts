@@ -9,6 +9,9 @@ import { createCFDI, getCFDIXml, parseCfdiIdentifiers } from "../lib/facturama.j
 import { getShipmentReadiness } from "../lib/shipment-readiness.js"
 import { withFolioRetry, folioNumber } from "../lib/folio.js"
 import { personaFromRfc, isAutotransporteCarga, IVA_RATE, IVA_RETENTION_RATE } from "../lib/taxes.js"
+import { renderQuotePdf } from "../lib/pdf/quote-pdf.js"
+import { renderPodPdf, type PodPdfInput } from "../lib/pdf/pod-pdf.js"
+import { SETTING_DEFAULTS } from "./settings.js"
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 async function getSetting(key: string, fallback: string): Promise<string> {
@@ -648,6 +651,153 @@ export async function processRoutes(app: FastifyInstance) {
       orderBy: { version: "desc" },
     })
     return reply.send(revisions)
+  })
+
+  // PDF de la cotización — documento COMERCIAL para el cliente (no fiscal).
+  // Solo lleva precios de venta: el costo estimado y el margen NUNCA se exponen.
+  app.get("/shipments/:id/quote/pdf", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      include: { customer: true, quote: true },
+    })
+    if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
+
+    const quote = shipment.quote
+    const rawItems = (quote?.items as { concept?: string; amount?: number; productKey?: string }[] | null) ?? []
+    // Mapeo explícito: descartamos estimatedCost (dato interno) — solo concepto, importe y clave SAT.
+    const items = rawItems
+      .filter((i) => (i.concept ?? "").trim() || Number(i.amount) > 0)
+      .map((i) => ({ concept: (i.concept ?? "").trim(), amount: Number(i.amount) || 0, productKey: i.productKey ?? null }))
+    if (!quote || !items.some((i) => i.amount > 0)) {
+      return reply.status(404).send({ error: "La cotización no tiene cargos capturados para generar el PDF." })
+    }
+
+    // Settings: emisor + branding (una sola consulta, merge con defaults)
+    const rows = await prisma.setting.findMany()
+    const sget = (key: string): string => {
+      const v = rows.find((r) => r.key === key)?.value ?? SETTING_DEFAULTS[key]
+      return typeof v === "string" ? v : String(v ?? "")
+    }
+    // Etiquetas legibles del servicio (Importación, Marítimo…) desde el catálogo
+    const labels = await prisma.catalogItem.findMany({
+      where: { category: { in: ["service_type", "transport_mode", "cargo_type"] }, active: true },
+      select: { category: true, code: true, name: true },
+    })
+    const labelOf = (category: string, code: string | null): string | null =>
+      code ? labels.find((l) => l.category === category && l.code === code)?.name ?? code : null
+
+    const c = shipment.customer
+    const pdf = await renderQuotePdf({
+      emisor: {
+        businessName: sget("general.businessName"),
+        name: sget("invoicing.emisorName"),
+        rfc: sget("invoicing.emisorRfc"),
+        regimen: sget("invoicing.regimenFiscal"),
+        cp: sget("invoicing.emisorCp"),
+        phone: sget("company.phone"),
+        email: sget("company.email"),
+        website: sget("company.website"),
+        address: sget("company.address"),
+      },
+      branding: { primary: sget("appearance.primaryColor"), accent: sget("appearance.accentColor") },
+      folio: shipment.folio,
+      issuedAt: new Date(),
+      validUntil: quote.validUntil ?? null,
+      status: quote.status,
+      currency: quote.currency,
+      customer: {
+        name: c.legalName || c.name,
+        rfc: c.rfc,
+        email: c.billingEmail || c.email,
+        phone: c.phone,
+      },
+      service: {
+        operation: labelOf("service_type", shipment.operationType),
+        transport: labelOf("transport_mode", shipment.transportMode),
+        cargo: labelOf("cargo_type", shipment.cargoType),
+        origin: shipment.origin,
+        destination: shipment.destination,
+        reference: shipment.reference,
+      },
+      items,
+      notes: quote.notes,
+    })
+
+    reply.header("Content-Type", "application/pdf")
+    reply.header("Content-Disposition", `inline; filename="cotizacion-${shipment.folio}.pdf"`)
+    return reply.send(pdf)
+  })
+
+  // PDF del POD / "Soporte de entrega en planta" — se imprime, viaja con la unidad y el almacén
+  // del cliente lo llena/firma/sella al recibir. Pre-llena lo que sabe el expediente; el resto
+  // queda en blanco. Parametrizado por ?legId (tramo de entrega) para POD por-tramo a futuro.
+  app.get("/shipments/:id/pod/pdf", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { legId } = request.query as { legId?: string }
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        containers: { orderBy: { createdAt: "asc" } },
+        merchandise: true,
+        legs: { orderBy: { order: "asc" }, include: { vehicles: { orderBy: { order: "asc" } } } },
+      },
+    })
+    if (!shipment) return reply.status(404).send({ error: "Expediente no encontrado" })
+
+    const legs = shipment.legs
+    // Tramo de entrega = el indicado, o el último (entrega final).
+    const deliveryLeg = (legId && legs.find((l) => l.id === legId)) || legs[legs.length - 1]
+    const firstLeg = legs[0]
+    const unit = deliveryLeg?.vehicles[0]
+    const [vehicle, operator] = await Promise.all([
+      unit?.vehicleId ? prisma.vehicle.findUnique({ where: { id: unit.vehicleId } }) : Promise.resolve(null),
+      unit?.operatorId ? prisma.operator.findUnique({ where: { id: unit.operatorId } }) : Promise.resolve(null),
+    ])
+
+    const rows = await prisma.setting.findMany()
+    const sget = (key: string): string => {
+      const v = rows.find((r) => r.key === key)?.value ?? SETTING_DEFAULTS[key]
+      return typeof v === "string" ? v : String(v ?? "")
+    }
+    const locStr = (j: unknown): string => {
+      const o = (j ?? {}) as { address?: string; name?: string; zip?: string }
+      return o.address || [o.name, o.zip].filter(Boolean).join(" ") || ""
+    }
+    const peso = shipment.merchandise.reduce((a, m) => a + Number(m.weight ?? 0), 0)
+    const cargoMap: Record<string, PodPdfInput["cargo"]> = { HAZMAT: "peligrosa", PERISHABLE: "refrigerado", OVERSIZED: "sobredimensionado" }
+    const c = shipment.customer
+
+    // "Transportista" SIEMPRE = el forwarder (H&M), nunca el carrier real (regla de negocio:
+    // no revelar el proveedor al cliente). El carrier real vive en la Carta Porte.
+    const pdf = await renderPodPdf({
+      empresa: sget("general.businessName"),
+      primary: sget("appearance.primaryColor"),
+      folio: shipment.folio,
+      origen: locStr(firstLeg?.origin) || shipment.origin || "",
+      destino: locStr(deliveryLeg?.destination) || shipment.destination || "",
+      fullSencillo: unit ? (unit.trailer2Plate ? "full" : "sencillo") : null,
+      localForaneo: legs.length ? (legs.some((l) => l.scope === "foraneo") ? "foraneo" : "local") : null,
+      cliente: c.legalName || c.name,
+      direccionEntrega: locStr(deliveryLeg?.destination),
+      referencia: shipment.reference || "",
+      contenedor1: shipment.containers[0]?.number || "",
+      contenedor2: shipment.containers[1]?.number || "",
+      peso: peso > 0 ? `${peso.toLocaleString("es-MX")} kg` : "",
+      tipo: shipment.containers[0]?.type || "",
+      sello: shipment.containers[0]?.seal || "",
+      unidad: vehicle?.plates || "",
+      operador: operator?.name || "",
+      telefono: sget("company.phone"),
+      lineaNaviera: "",
+      cargo: cargoMap[shipment.cargoType ?? ""] ?? "normal",
+      lugarCarga: locStr(firstLeg?.origin) || "",
+    })
+
+    reply.header("Content-Type", "application/pdf")
+    reply.header("Content-Disposition", `inline; filename="POD-${shipment.folio}.pdf"`)
+    return reply.send(pdf)
   })
 
   // ── Tareas (de fase y de tramo) ─────────────────────────────────────────────

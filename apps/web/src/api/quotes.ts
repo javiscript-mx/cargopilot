@@ -52,4 +52,6 @@ export const quotesApi = {
   save: (shipmentId: string, data: QuoteInput) =>
     apiClient.put<ShipmentQuote>(`/shipments/${shipmentId}/quote`, data),
   revisions: (shipmentId: string) => apiClient.get<QuoteRevision[]>(`/shipments/${shipmentId}/quote/revisions`),
+  // URL del PDF comercial de la cotización (se abre en pestaña nueva; usa la cookie de sesión)
+  pdfUrl: (shipmentId: string) => `/api/shipments/${shipmentId}/quote/pdf`,
 }
